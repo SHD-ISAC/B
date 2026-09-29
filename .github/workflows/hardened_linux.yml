@@ -1,0 +1,146 @@
+name: Hardened Linux Build
+
+on:
+  push:
+    branches:
+      - 'hardened-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-linux-x64:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Verify hardened source policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if grep -R -nE \
+            'sentry_flutter|SentryFlutter|SentryWidget|Sentry\.capture|sendDefaultPii|sentry_dsn|flatpak-spawn|setTlsVerifyEnabled\(enabled:[[:space:]]*false\)' \
+            lib pubspec.yaml script rust/build.rs; then
+            echo "::error::Telemetry, host-spawn, or disabled TLS verification reappeared"
+            exit 1
+          fi
+
+          if grep -nF '@latest' rust/build.rs; then
+            echo "::error::Moving @latest plugin dependency reappeared"
+            exit 1
+          fi
+
+          if grep -nE '_silentCloudUpdate|Timer\(delay' lib/plugin/plugin_cloud_update_service.dart; then
+            echo "::error::Background plugin auto-update implementation reappeared"
+            exit 1
+          fi
+
+          grep -qF 'setTlsVerifyEnabled(enabled: true)' lib/main.dart
+          grep -qF 'breeze-plugin-jm-comic@0.0.11' rust/build.rs
+          grep -qF 'breeze-plugin-bika-comic@0.0.10' rust/build.rs
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            dpkg-dev \
+            libayatana-appindicator3-dev \
+            libclang-dev \
+            libcurl4-openssl-dev \
+            libgcrypt20-dev \
+            libgtk-3-dev \
+            liblzma-dev \
+            libwebkit2gtk-4.1-dev \
+            llvm-dev \
+            ninja-build \
+            pkg-config
+
+      - name: Setup Dart
+        uses: dart-lang/setup-dart@v1
+
+      - name: Setup Flutter with FVM
+        shell: bash
+        run: |
+          set -euo pipefail
+          dart pub global activate fvm
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+          export PATH="$PATH:$HOME/.pub-cache/bin"
+          fvm install
+          fvm use --force
+          echo "$GITHUB_WORKSPACE/.fvm/flutter_sdk/bin" >> "$GITHUB_PATH"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Resolve Flutter dependencies
+        run: fvm flutter pub get
+
+      - name: Build hardened Linux deb
+        run: fvm dart ./script/build_linux_deb.dart
+
+      - name: Record built-in plugin hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build-deb
+          sha256sum \
+            rust/assets/jm-comic.bundle.cjs \
+            rust/assets/bika-comic.bundle.cjs \
+            | tee build-deb/BUILTIN_PLUGIN_SHA256SUMS
+
+      - name: Verify built package policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DEB="$(find build-deb -maxdepth 1 -type f -name 'breeze_*.deb' -print -quit)"
+          test -n "$DEB"
+
+          TMP="$(mktemp -d)"
+          trap 'rm -rf "$TMP"' EXIT
+          dpkg-deb -x "$DEB" "$TMP"
+
+          test -x "$TMP/opt/breeze/breeze"
+
+          if find "$TMP/opt/breeze" -type f -print0 \
+              | xargs -0 strings -a 2>/dev/null \
+              | grep -iE 'sentry\.io|SentryFlutter|SentryWidget|flatpak-spawn'; then
+            echo "::error::Unexpected telemetry or Flatpak host-spawn marker found in built package"
+            exit 1
+          fi
+
+      - name: Generate SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum build-deb/breeze_*.deb | tee build-deb/SHA256SUMS
+
+      - name: Upload hardened artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: Breeze-Hardened-Linux-x64
+          path: |
+            build-deb/breeze_*.deb
+            build-deb/SHA256SUMS
+            build-deb/BUILTIN_PLUGIN_SHA256SUMS
+          if-no-files-found: error
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: build-deb/breeze_*.deb
