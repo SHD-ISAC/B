@@ -1,12 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi';
 import 'dart:io';
 import 'dart:ui' show AppExitResponse;
 
 import 'package:auto_route/auto_route.dart';
 import 'package:desktop_webview_linux/desktop_webview_linux.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:event_bus/event_bus.dart';
 import 'package:flutter/foundation.dart';
@@ -18,7 +16,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_socks_proxy/socks_proxy.dart';
 import 'package:logger/logger.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:worker_manager/worker_manager.dart';
 import 'package:zephyr/config/global/global.dart';
@@ -119,124 +116,48 @@ class MyAlwaysLogFilter extends LogFilter {
 }
 
 Future<void> main(List<String> args) async {
-  // 1. 基础初始化
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 先生成本地同步设备 ID，后续文件夹/链接的版本向量会使用它
   await ensureSyncDeviceId();
 
-  // desktop_webview_linux 必需的标题栏子进程入口
-  // 不添加会导致 Linux 下 WebView 窗口关闭时 segfault 崩溃
+  // desktop_webview_linux title-bar subprocess entry.
   if (!kIsWeb && Platform.isLinux && runWebViewTitleBarWidget(args)) {
     return;
   }
 
-  const sentryDsn = String.fromEnvironment('sentry_dsn', defaultValue: '');
+  // Hardened build: keep error reporting local. No Sentry/remote telemetry.
+  FlutterError.onError = (FlutterErrorDetails details) {
+    logger.e(
+      "Flutter Framework Error",
+      error: details.exception,
+      stackTrace: details.stack,
+    );
+  };
 
-  if (sentryDsn.isEmpty) {
-    // 1. 如果是调试模式，配置 logger 捕获全局错误
-    if (kDebugMode || sentryDsn.isEmpty) {
-      // 捕获 Flutter 框架层错误（如 Widget 构建中的异常）
-      FlutterError.onError = (FlutterErrorDetails details) {
-        logger.e(
-          "Flutter Framework Error",
-          error: details.exception,
-          stackTrace: details.stack,
-        );
-      };
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    logger.e("Async/Platform Error", error: error, stackTrace: stack);
+    return true;
+  };
 
-      // 捕获异步错误和底层错误（如 Future.error, Timer 等）
-      PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-        logger.e("Async/Platform Error", error: error, stackTrace: stack);
-        return true; // 表示错误已被处理
-      };
-    }
+  try {
+    final (globalSettingCubit, pluginRegistryCubit) = await _initServices();
+    final comicFollowCubit = ComicFollowCubit();
+    final comicReadPreferenceCubit = ComicReadPreferenceCubit();
 
-    try {
-      // 2. 执行业务初始化
-      final (globalSettingCubit, pluginRegistryCubit) = await _initServices();
-
-      final comicFollowCubit = ComicFollowCubit();
-      final comicReadPreferenceCubit = ComicReadPreferenceCubit();
-
-      runApp(
-        MultiBlocProvider(
-          providers: [
-            BlocProvider.value(value: globalSettingCubit),
-            BlocProvider.value(value: pluginRegistryCubit),
-            BlocProvider.value(value: comicFollowCubit),
-            BlocProvider.value(value: comicReadPreferenceCubit),
-          ],
-          child: const MyApp(),
-        ),
-      );
-    } catch (e, stack) {
-      // 捕获初始化阶段（_initServices）可能抛出的异常
-      if (kDebugMode || sentryDsn.isEmpty) {
-        logger.e("App Setup Failed", error: e, stackTrace: stack);
-      }
-    }
-
-    return;
+    runApp(
+      MultiBlocProvider(
+        providers: [
+          BlocProvider.value(value: globalSettingCubit),
+          BlocProvider.value(value: pluginRegistryCubit),
+          BlocProvider.value(value: comicFollowCubit),
+          BlocProvider.value(value: comicReadPreferenceCubit),
+        ],
+        child: const MyApp(),
+      ),
+    );
+  } catch (e, stack) {
+    logger.e("App Setup Failed", error: e, stackTrace: stack);
   }
-
-  // 2. 使用 Sentry 包装整个应用生命周期
-  await SentryFlutter.init(
-    (options) {
-      options.dsn = sentryDsn;
-
-      // 开启默认的个人信息采集（IP/Header），有助于分析用户分布
-      options.sendDefaultPii = true;
-
-      // 仅在调试模式下打印 Sentry 内部日志
-      options.debug = kDebugMode;
-
-      // --- Sentry Sponsored Business 特权配置 ---
-      // 性能追踪采样率
-      options.tracesSampleRate = 1.0;
-
-      // sentry_flutter 10.0.0-alpha.5 暂不提供 Dart 侧性能剖析采样配置。
-
-      // Android 上暂时关闭 Replay，规避原生侧生命周期卡顿/ANR 风险。
-      if (Platform.isAndroid) {
-        options.replay.sessionSampleRate = 0.0;
-        options.replay.onErrorSampleRate = 0.0;
-      } else {
-        // 会话回放设置：平时抽样 10%，遇到错误时 100% 录制
-        options.replay.sessionSampleRate = 0.1;
-        options.replay.onErrorSampleRate = 1.0;
-      }
-
-      // 附加线程信息和堆栈，增强原生层（Rust/C++）错误分析
-      options.attachThreads = true;
-      options.attachStacktrace = true;
-    },
-    appRunner: () async {
-      try {
-        final (globalSettingCubit, pluginRegistryCubit) = await _initServices();
-        final comicFollowCubit = ComicFollowCubit();
-        final comicReadPreferenceCubit = ComicReadPreferenceCubit();
-
-        await addArchitectureTagsToSentry();
-
-        runApp(
-          SentryWidget(
-            child: MultiBlocProvider(
-              providers: [
-                BlocProvider.value(value: globalSettingCubit),
-                BlocProvider.value(value: pluginRegistryCubit),
-                BlocProvider.value(value: comicFollowCubit),
-                BlocProvider.value(value: comicReadPreferenceCubit),
-              ],
-              child: MyApp(),
-            ),
-          ),
-        );
-      } catch (exception, stackTrace) {
-        await Sentry.captureException(exception, stackTrace: stackTrace);
-      }
-    },
-  );
 }
 
 Future<(GlobalSettingCubit, PluginRegistryCubit)> _initServices() async {
@@ -358,7 +279,8 @@ Future<(GlobalSettingCubit, PluginRegistryCubit)> _initServices() async {
   // 关掉缓存定时清理(rust端)
   setHostCacheGcEnabled(enabled: false);
 
-  setTlsVerifyEnabled(enabled: false);
+  // Hardened build: TLS certificate verification is always enabled.
+  setTlsVerifyEnabled(enabled: true);
 
   await applyEinkAutoDetection(globalSettingCubit);
 
@@ -424,51 +346,6 @@ Future<bool> _probeProxyWithTimeout(String proxyUrl) async {
     return response.status >= 200 && response.status < 500;
   } catch (_) {
     return false;
-  }
-}
-
-Future<void> addArchitectureTagsToSentry() async {
-  try {
-    final is64Bit = sizeOf<Pointer>() == 8;
-    final appArchitecture = is64Bit ? '64-bit' : '32-bit';
-
-    String deviceSupportedAbis = 'unknown';
-
-    if (Platform.isAndroid) {
-      final androidInfo = await DeviceInfoPlugin().androidInfo;
-      deviceSupportedAbis = androidInfo.supportedAbis.join(', ');
-    } else if (Platform.isIOS) {
-      final iosInfo = await DeviceInfoPlugin().iosInfo;
-      deviceSupportedAbis = 'arm64 (${iosInfo.utsname.machine})';
-    } else if (Platform.isWindows) {
-      deviceSupportedAbis =
-          Platform.environment['PROCESSOR_ARCHITECTURE'] ?? 'unknown';
-    } else if (Platform.isLinux) {
-      try {
-        final result = Process.runSync('uname', ['-m']);
-        deviceSupportedAbis = result.stdout.toString().trim();
-      } catch (_) {
-        deviceSupportedAbis = 'unknown';
-      }
-    } else if (Platform.isMacOS) {
-      final macInfo = await DeviceInfoPlugin().macOsInfo;
-      deviceSupportedAbis = macInfo.arch;
-    }
-
-    Sentry.configureScope((scope) {
-      scope.setTag('app_runtime_arch', appArchitecture);
-      scope.setTag('device_supported_abis', deviceSupportedAbis);
-
-      scope.addBreadcrumb(
-        Breadcrumb(
-          message:
-              'Architecture Info - App: $appArchitecture, Device: $deviceSupportedAbis',
-          category: 'system.architecture',
-        ),
-      );
-    });
-  } catch (e, stack) {
-    await Sentry.captureException(e, stackTrace: stack);
   }
 }
 

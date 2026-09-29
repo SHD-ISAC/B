@@ -86,13 +86,7 @@ class ExternalChromiumLoginSession {
   final int debugPort;
   final String openUrl;
 
-  static bool get _isFlatpakLinux {
-    if (!Platform.isLinux) {
-      return false;
-    }
-    final flatpakId = Platform.environment['FLATPAK_ID'] ?? '';
-    return flatpakId.trim().isNotEmpty;
-  }
+  static bool get _isFlatpakLinux => false;
 
   static Future<ExternalChromiumLoginSession?> start({
     required String openUrl,
@@ -362,14 +356,6 @@ class ExternalChromiumLoginSession {
     required bool useHostSpawn,
   }) async {
     try {
-      if (useHostSpawn) {
-        await Process.start('flatpak-spawn', <String>[
-          '--host',
-          executable,
-          ...args,
-        ], mode: ProcessStartMode.detached);
-        return true;
-      }
       await Process.start(executable, args, mode: ProcessStartMode.detached);
       return true;
     } catch (_) {
@@ -385,9 +371,6 @@ class ExternalChromiumLoginSession {
   }
 
   static Future<String> _resolveUserDataDir(int port, bool useHostSpawn) async {
-    if (useHostSpawn && Platform.isLinux) {
-      return '/tmp/breeze-chromium-cdp-$port';
-    }
     final directory = Directory(
       '${Directory.systemTemp.path}${Platform.pathSeparator}breeze-chromium-cdp-$port',
     );
@@ -428,13 +411,6 @@ class ExternalChromiumLoginSession {
     required List<String> args,
     required bool useHostSpawn,
   }) async {
-    if (useHostSpawn) {
-      return Process.run('flatpak-spawn', <String>[
-        '--host',
-        executable,
-        ...args,
-      ]);
-    }
     return Process.run(executable, args);
   }
 

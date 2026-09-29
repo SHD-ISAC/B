@@ -1557,15 +1557,13 @@ pub async fn qjs_cancel_tasks_by_group(
 }
 
 pub fn set_http_proxy(proxy: String) -> Result<()> {
-    configure_http_client(HttpClientConfig {
-        use_http_proxy: true,
-        use_socks5_proxy: false,
-        http_proxy: Some(proxy),
-        socks5_proxy: None,
-        disable_tls_verify: true,
-        allow_private_network: false,
-    })
-    .map_err(|err| anyhow!("设置 http 代理失败: {err}"))
+    let mut config = current_http_client_config();
+    config.use_http_proxy = true;
+    config.use_socks5_proxy = false;
+    config.http_proxy = Some(proxy);
+    config.socks5_proxy = None;
+    config.allow_private_network = false;
+    configure_http_client(config).map_err(|err| anyhow!("设置 http 代理失败: {err}"))
 }
 
 pub fn set_socks5_proxy(proxy: String) -> Result<()> {
@@ -1584,8 +1582,14 @@ pub fn set_socks5_proxy(proxy: String) -> Result<()> {
 }
 
 pub fn set_tls_verify_enabled(enabled: bool) -> Result<()> {
+    if !enabled {
+        return Err(anyhow!(
+            "Hardened build forbids disabling TLS certificate verification"
+        ));
+    }
+
     let mut config = current_http_client_config();
-    config.disable_tls_verify = !enabled;
+    config.disable_tls_verify = false;
     configure_http_client(config).map_err(|err| anyhow!("设置 TLS 校验开关失败: {err}"))
 }
 

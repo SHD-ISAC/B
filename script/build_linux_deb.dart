@@ -88,35 +88,14 @@ Future<String> _readDebVersion(String projectRoot) async {
 }
 
 Future<void> _buildLinuxRelease(String projectRoot) async {
-  final env = Map<String, String>.from(Platform.environment);
-  final sentryDsn = env['SENTRY_DSN']?.trim() ?? '';
-
   final args = <String>[
     'build',
     'linux',
     '--release',
-    '--split-debug-info=$projectRoot${Platform.pathSeparator}build${Platform.pathSeparator}symbols',
+    '--split-debug-info=$projectRoot/build/symbols',
   ];
-  if (sentryDsn.isNotEmpty) {
-    args.add('--dart-define=sentry_dsn=$sentryDsn');
-    _log('Detected SENTRY_DSN, injecting dart-define.', color: _green);
-  }
 
   await _run('flutter', args, cwd: projectRoot);
-
-  // sentry_flutter 10 默认切到 breakpad 后不再产出 crashpad_handler，
-  // 该文件仅在使用 crashpad 后端时存在，缺失属于正常情况。
-  final crashpad = File(
-    '$projectRoot${Platform.pathSeparator}build${Platform.pathSeparator}linux'
-    '${Platform.pathSeparator}x64${Platform.pathSeparator}release'
-    '${Platform.pathSeparator}bundle${Platform.pathSeparator}lib'
-    '${Platform.pathSeparator}crashpad_handler',
-  );
-  if (await crashpad.exists()) {
-    await _run('chmod', ['+x', crashpad.path], cwd: projectRoot);
-  } else {
-    _log('crashpad_handler not bundled (non-crashpad backend?), skip chmod.', color: _yellow);
-  }
 }
 
 Future<String> _assembleDebRoot({

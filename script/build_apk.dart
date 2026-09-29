@@ -218,12 +218,6 @@ Future<void> main(List<String> args) async {
     final String flutterExecutable = paths['flutterExecutable']!;
     final String symbolsDir = paths['symbolsDir']!;
 
-    final String sentryDsn = env['SENTRY_DSN'] ?? '';
-    if (sentryDsn.isEmpty) {
-      _printColor('提示: 未找到 sentry_dsn 环境变量，将使用空字符串', _yellow);
-    } else {
-      _printColor('已读取 Sentry DSN (长度: ${sentryDsn.length})', _green);
-    }
 
     _printColor('Flutter 命令: $flutterExecutable', _green);
     _printColor('工作目录: $projectRoot', _yellow);
@@ -238,7 +232,6 @@ Future<void> main(List<String> args) async {
           'apk',
           '--debug',
           '--target-platform=android-arm64,android-x64',
-          '--dart-define=sentry_dsn=$sentryDsn',
         ],
         workingDirectory: projectRoot,
         environment: env,
@@ -261,7 +254,6 @@ Future<void> main(List<String> args) async {
         'apk',
         '--split-per-abi',
         '--split-debug-info=$symbolsDir',
-        '--dart-define=sentry_dsn=$sentryDsn',
       ],
       workingDirectory: projectRoot,
       environment: env,

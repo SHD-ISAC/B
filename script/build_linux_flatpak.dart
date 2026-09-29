@@ -45,58 +45,14 @@ Future<void> _run(
 }
 
 Future<void> _buildLinuxRelease(String projectRoot) async {
-  final env = Map<String, String>.from(Platform.environment);
-  final sentryDsn = env['SENTRY_DSN']?.trim() ?? '';
-  final symbolsDir = env['SPLIT_DEBUG_INFO']?.trim() ?? 'build/symbols';
+  final symbolsDir =
+      Platform.environment['SPLIT_DEBUG_INFO']?.trim() ?? 'build/symbols';
 
-  final args = <String>[
-    'build',
-    'linux',
-    '--release',
-    '--split-debug-info=$symbolsDir',
-  ];
-  if (sentryDsn.isNotEmpty) {
-    args.add('--dart-define=sentry_dsn=$sentryDsn');
-    _log('Detected SENTRY_DSN, injecting dart-define.', color: _green);
-  } else {
-    _log('SENTRY_DSN not set, continue without dart-define.', color: _yellow);
-  }
-
-  await _run('flutter', args, cwd: projectRoot);
-
-  // sentry_flutter 10 默认切到 breakpad 后不再产出 crashpad_handler，
-  // 该文件仅在使用 crashpad 后端时存在，缺失属于正常情况。
-  final crashpad = File(
-    '$projectRoot${Platform.pathSeparator}build${Platform.pathSeparator}linux${Platform.pathSeparator}x64${Platform.pathSeparator}release${Platform.pathSeparator}bundle${Platform.pathSeparator}lib${Platform.pathSeparator}crashpad_handler',
+  await _run(
+    'flutter',
+    ['build', 'linux', '--release', '--split-debug-info=$symbolsDir'],
+    cwd: projectRoot,
   );
-  if (await crashpad.exists()) {
-    await _run('chmod', ['+x', crashpad.path], cwd: projectRoot);
-  } else {
-    _log('crashpad_handler not bundled (non-crashpad backend?), skip chmod.', color: _yellow);
-  }
-}
-
-Future<void> _uploadSentrySymbolsIfConfigured(String projectRoot) async {
-  final env = Platform.environment;
-  final token = env['SENTRY_AUTH_TOKEN']?.trim() ?? '';
-  final org = env['SENTRY_ORG']?.trim() ?? '';
-  final project = env['SENTRY_PROJECT']?.trim() ?? '';
-
-  if (token.isEmpty || org.isEmpty || project.isEmpty) {
-    _log(
-      'SENTRY_AUTH_TOKEN/SENTRY_ORG/SENTRY_PROJECT missing, skip symbol upload.',
-      color: _yellow,
-    );
-    return;
-  }
-
-  _log('Uploading Linux symbols to Sentry...', color: _green);
-  await _run('fvm', [
-    'dart',
-    'run',
-    'sentry_dart_plugin',
-    '--sentry-define=auth_token=$token',
-  ], cwd: projectRoot);
 }
 
 Future<void> _buildFlatpak(String projectRoot) async {
@@ -158,11 +114,10 @@ Future<void> main() async {
   _log('Project root: $projectRoot', color: _green);
 
   await _buildLinuxRelease(projectRoot);
-  await _uploadSentrySymbolsIfConfigured(projectRoot);
   await _buildFlatpak(projectRoot);
 
   _log(
-    'Pipeline completed: build -> symbol upload (optional) -> flatpak.',
+    'Pipeline completed: build -> flatpak.',
     color: _green,
   );
 }

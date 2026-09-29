@@ -3,14 +3,21 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-const PLUGIN_ASSETS: [(&str, &str); 2] = [
+use sha2::{Digest, Sha256};
+
+// Pinned plugin releases. Upstream source commits at time of pinning:
+// JM 0.0.11: fa2496cf75c7511a2f41031e7ca7eb8692fc5d72
+// Bika 0.0.10: 700aa3393d433d1957e16607e0db99a28e44ceee
+const PLUGIN_ASSETS: [(&str, &str, &str); 2] = [
     (
-        "https://cdn.jsdelivr.net/npm/breeze-plugin-jm-comic@latest/dist/breeze-plugin-jm-comic.bundle.cjs",
+        "https://cdn.jsdelivr.net/npm/breeze-plugin-jm-comic@0.0.11/dist/breeze-plugin-jm-comic.bundle.cjs",
         "jm-comic.bundle.cjs",
+        "182f8e5c388c052ea80c8c18efdcb2edde6c6d8ee58fbdf41204a6ca131779ea",
     ),
     (
-        "https://cdn.jsdelivr.net/npm/breeze-plugin-bika-comic@latest/dist/breeze-plugin-bika-comic.bundle.cjs",
+        "https://cdn.jsdelivr.net/npm/breeze-plugin-bika-comic@0.0.10/dist/breeze-plugin-bika-comic.bundle.cjs",
         "bika-comic.bundle.cjs",
+        "083a9f1efd45a3935a9b348609fb246236c6395af84d11b53414a6bbd287eb5f",
     ),
 ];
 const USER_AGENT: &str = "Breeze-build-script";
@@ -38,12 +45,17 @@ fn main() {
     fs::create_dir_all(&assets_dir)
         .unwrap_or_else(|err| panic!("failed to create assets dir {:?}: {err}", assets_dir));
 
-    for (url, file_name) in PLUGIN_ASSETS {
+    for (url, file_name, expected_sha256) in PLUGIN_ASSETS {
         let destination = assets_dir.join(file_name);
-        if let Err(err) = download_to(url, &destination) {
+        if let Err(err) = download_to(url, &destination, expected_sha256) {
             if destination.exists() {
+                verify_file_sha256(&destination, expected_sha256).unwrap_or_else(|verify_err| {
+                    panic!(
+                        "failed to refresh {file_name} ({err}); cached file also failed verification: {verify_err}"
+                    )
+                });
                 println!(
-                    "cargo:warning=failed to refresh {file_name} ({err}), fallback to cached file"
+                    "cargo:warning=failed to refresh {file_name} ({err}), using verified cached file"
                 );
             } else {
                 panic!("{err}");
@@ -52,7 +64,24 @@ fn main() {
     }
 }
 
-fn download_to(url: &str, destination: &Path) -> Result<(), String> {
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+fn verify_file_sha256(path: &Path, expected_sha256: &str) -> Result<(), String> {
+    let bytes = fs::read(path)
+        .map_err(|err| format!("failed to read {:?} for SHA-256 verification: {err}", path))?;
+    let actual = sha256_hex(&bytes);
+    if actual != expected_sha256 {
+        return Err(format!(
+            "SHA-256 mismatch for {:?}: expected {expected_sha256}, got {actual}",
+            path
+        ));
+    }
+    Ok(())
+}
+
+fn download_to(url: &str, destination: &Path, expected_sha256: &str) -> Result<(), String> {
     let response = ureq::get(url)
         .header("User-Agent", USER_AGENT)
         .call()
@@ -63,6 +92,13 @@ fn download_to(url: &str, destination: &Path) -> Result<(), String> {
     let mut bytes = Vec::new();
     io::copy(&mut reader, &mut bytes)
         .map_err(|err| format!("failed to read response body from {url}: {err}"))?;
+
+    let actual = sha256_hex(&bytes);
+    if actual != expected_sha256 {
+        return Err(format!(
+            "SHA-256 mismatch for {url}: expected {expected_sha256}, got {actual}"
+        ));
+    }
 
     fs::write(destination, bytes)
         .map_err(|err| format!("failed to write {:?}: {err}", destination))?;

@@ -9,7 +9,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   objectbox_flutter_libs
   open_file_linux
   screen_retriever_linux
-  sentry_flutter
   url_launcher_linux
   window_manager
 )

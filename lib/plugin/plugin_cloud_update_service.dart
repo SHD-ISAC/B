@@ -15,113 +15,17 @@ class PluginCloudUpdateService {
   PluginCloudUpdateService._();
   static final PluginCloudUpdateService I = PluginCloudUpdateService._();
 
-  bool _silentCloudUpdateScheduled = false;
-  Timer? _silentCloudUpdateTimer;
-  bool _silentCloudUpdateRunning = false;
-
+  /// Hardened build: background plugin mutation is disabled.
+  ///
+  /// Plugin installation and the explicit per-plugin manual sync action remain
+  /// available, but plugins are never replaced automatically in the background.
   void scheduleSilentCloudUpdate({
     Duration delay = const Duration(minutes: 5),
-  }) {
-    if (_silentCloudUpdateScheduled) {
-      return;
-    }
-    _silentCloudUpdateScheduled = true;
-    _silentCloudUpdateTimer?.cancel();
-    _silentCloudUpdateTimer = Timer(delay, () {
-      unawaited(runSilentCloudUpdateOnce());
-    });
-  }
+  }) {}
 
-  Future<void> runSilentCloudUpdateOnce() async {
-    if (_silentCloudUpdateRunning) {
-      return;
-    }
-    _silentCloudUpdateRunning = true;
-    try {
-      await silentUpdateFromCloud();
-    } catch (e, st) {
-      logger.w('静默更新插件失败', error: e, stackTrace: st);
-    } finally {
-      _silentCloudUpdateRunning = false;
-    }
-  }
+  Future<void> runSilentCloudUpdateOnce() async {}
 
-  /// 静默自动更新：
-  /// - 在云端列表中的插件：只走列表 version / 下载坐标
-  /// - 不在列表中的插件：只走自身 npmName / updateUrl
-  /// 两条路径互不回退。
-  Future<void> silentUpdateFromCloud() async {
-    final localPlugins = PluginRegistryService.I.snapshot.values
-        .where((item) => !item.isDeleted)
-        .toList();
-    if (localPlugins.isEmpty) {
-      return;
-    }
-
-    var cloudByUuid = <String, CloudPluginCatalogItem>{};
-    try {
-      final cloudItems = await _fetchCloudPluginCatalog();
-      cloudByUuid = {
-        for (final item in cloudItems)
-          if (item.manifest.uuid.trim().isNotEmpty)
-            item.manifest.uuid.trim(): item,
-      };
-    } catch (e, st) {
-      logger.w('静默更新拉取云端列表失败，将全部尝试自身更新通道', error: e, stackTrace: st);
-    }
-
-    final inList = <PluginRuntimeState>[];
-    final outList = <PluginRuntimeState>[];
-    for (final local in localPlugins) {
-      if (cloudByUuid.containsKey(local.uuid)) {
-        inList.add(local);
-      } else {
-        outList.add(local);
-      }
-    }
-
-    var updatedCount = 0;
-
-    for (final local in inList) {
-      final cloud = cloudByUuid[local.uuid];
-      if (cloud == null) {
-        continue;
-      }
-      try {
-        final updated = await _tryUpdateFromCloudCatalog(
-          local: local,
-          cloud: cloud,
-        );
-        if (updated) {
-          updatedCount++;
-        }
-      } catch (e, st) {
-        logger.w('插件静默更新失败(列表): ${local.uuid}', error: e, stackTrace: st);
-      }
-    }
-
-    if (outList.isNotEmpty) {
-      final results = await Future.wait(
-        outList.map((local) async {
-          try {
-            return await _tryUpdateFromSelfChannel(
-              local: local,
-              sourceLabel: '静默更新(自身通道)',
-            );
-          } catch (e, st) {
-            logger.w('插件静默更新失败(自身通道): ${local.uuid}', error: e, stackTrace: st);
-            return false;
-          }
-        }),
-        eagerError: false,
-      );
-      updatedCount += results.where((ok) => ok).length;
-    }
-
-    if (updatedCount > 0) {
-      logger.i('静默更新完成，共更新 $updatedCount 个插件');
-    }
-  }
+  Future<void> silentUpdateFromCloud() async {}
 
   /// 插件设置「同步」：固定走 npm / updateUrl 自身通道。
   ///

@@ -228,12 +228,6 @@ Future<void> main(List<String> args) async {
 
     final releaseDir = Directory(releaseDirPath);
     if (shouldBuildFlutter) {
-      final String sentryDsn = Platform.environment['SENTRY_DSN'] ?? '';
-      if (sentryDsn.isEmpty) {
-        _printColor('提示: 未找到 SENTRY_DSN 环境变量，将使用空字符串', _yellow);
-      } else {
-        _printColor('已读取 Sentry DSN (长度: ${sentryDsn.length})', _green);
-      }
 
       // ═══ 第 1 步：Flutter build ═══
       _printColor('--- (1/4) 构建 Flutter Windows Release ---', _cyan);
@@ -242,7 +236,6 @@ Future<void> main(List<String> args) async {
         'build',
         'windows',
         '--release',
-        '--dart-define=sentry_dsn=$sentryDsn',
         '--split-debug-info=$projectRoot${sep}build${sep}symbols',
       ], workingDirectory: projectRoot);
 

@@ -1524,30 +1524,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.27.3"
-  sentry:
-    dependency: transitive
-    description:
-      name: sentry
-      sha256: ab4c2b5874b201cd92e1d31daef67b82dcd2ad4b6ab06aea94c4fb6bc5b4b8cd
-      url: "https://pub.dev"
-    source: hosted
-    version: "10.0.0-rc.0"
-  sentry_dart_plugin:
-    dependency: "direct dev"
-    description:
-      name: sentry_dart_plugin
-      sha256: da9c1d0b3c87a251bfc36301f16af090a88c2d59128fe9a6f908f5ac20340c97
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.4.0"
-  sentry_flutter:
-    dependency: "direct main"
-    description:
-      name: sentry_flutter
-      sha256: "80adf158dd940eb265a89306133d37b8de1b30c45ddf73c8ba7e61f4f3345057"
-      url: "https://pub.dev"
-    source: hosted
-    version: "10.0.0-rc.0"
   serial_csv:
     dependency: transitive
     description:
