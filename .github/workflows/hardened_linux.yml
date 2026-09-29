@@ -30,7 +30,7 @@ jobs:
 
           if grep -R -nE \
             'sentry_flutter|SentryFlutter|SentryWidget|Sentry\.capture|sendDefaultPii|sentry_dsn|flatpak-spawn|setTlsVerifyEnabled\(enabled:[[:space:]]*false\)|disable_tls_verify:[[:space:]]*true' \
-            lib pubspec.yaml script rust/build.rs; then
+            lib pubspec.yaml script rust/build.rs rust/src/qjs/mod.rs rust/rquickjs_playground/src/web_runtime/http.rs; then
             echo "::error::Telemetry, host-spawn, or disabled TLS verification reappeared"
             exit 1
           fi
