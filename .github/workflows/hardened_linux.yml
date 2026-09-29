@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Verify hardened source policy
         shell: bash
@@ -48,6 +48,11 @@ jobs:
           grep -qF 'setTlsVerifyEnabled(enabled: true)' lib/main.dart
           grep -qF 'breeze-plugin-jm-comic@0.0.11' rust/build.rs
           grep -qF 'breeze-plugin-bika-comic@0.0.10' rust/build.rs
+          test "$(grep -cF 'injectFilesystem: false' lib/plugin/plugin_registry_service.dart)" -ge 2
+          if grep -qF 'injectFilesystem: true' lib/plugin/plugin_registry_service.dart; then
+            echo "::error::Plugin filesystem bridge was enabled"
+            exit 1
+          fi
 
       - name: Install Linux build dependencies
         run: |
@@ -68,13 +73,15 @@ jobs:
             pkg-config
 
       - name: Setup Dart
-        uses: dart-lang/setup-dart@v1
+        uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1
+        with:
+          sdk: 3.13.5
 
       - name: Setup Flutter with FVM
         shell: bash
         run: |
           set -euo pipefail
-          dart pub global activate fvm
+          dart pub global activate fvm 4.3.1
           echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
           export PATH="$PATH:$HOME/.pub-cache/bin"
           fvm install
@@ -82,9 +89,9 @@ jobs:
           echo "$GITHUB_WORKSPACE/.fvm/flutter_sdk/bin" >> "$GITHUB_PATH"
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
-          toolchain: stable
+          toolchain: 1.98.1
           targets: x86_64-unknown-linux-gnu
 
       - name: Resolve Flutter dependencies
@@ -131,7 +138,7 @@ jobs:
           sha256sum build-deb/breeze_*.deb | tee build-deb/SHA256SUMS
 
       - name: Upload hardened artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: Breeze-Hardened-Linux-x64
           path: |
@@ -141,6 +148,6 @@ jobs:
           if-no-files-found: error
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: build-deb/breeze_*.deb
