@@ -20,12 +20,12 @@
   "packageManager": "pnpm@10.27.0",
   "devDependencies": {
     "@types/node": "^25.3.3",
-    "esbuild": "^0.27.3",
+    "esbuild": "^0.28.1",
     "typescript": "^5.9.3"
   },
   "dependencies": {
     "abab": "^2.0.6",
-    "axios": "^1.13.6",
+    "axios": "^1.18.0",
     "blob-polyfill": "^9.0.20240710",
     "buffer": "^6.0.3",
     "core-js": "^3.49.0",
