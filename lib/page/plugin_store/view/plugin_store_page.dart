@@ -1,5 +1,5 @@
 import 'package:auto_route/auto_route.dart';
-import 'package:file_selector/file_selector.dart';
+import 'package:zephyr/plugin/utils/plugin_local_file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,6 +8,7 @@ import 'package:zephyr/page/plugin_store/cubit/plugin_store_cubit.dart';
 import 'package:zephyr/page/plugin_store/widgets/cloud_plugin_card.dart';
 import 'package:zephyr/page/plugin_store/widgets/plugin_store_status_banner.dart';
 import 'package:zephyr/widgets/toast.dart';
+import 'package:zephyr/main.dart';
 
 @RoutePage()
 class PluginStorePage extends StatelessWidget {
@@ -125,7 +126,7 @@ class _PluginStorePageContentState extends State<_PluginStorePageContent> {
     final displayPlugins = state.cloudPlugins.where((item) {
       if (query.isEmpty) return true;
       final name = item.manifest.name.toLowerCase();
-      final creator = item.manifest.creatorName.toLowerCase();
+      final creator = item.manifest.authorOf(item.repo).toLowerCase();
       final repo = item.repo.toLowerCase();
       return name.contains(query) ||
           creator.contains(query) ||
@@ -260,15 +261,7 @@ class _PluginStorePageContentState extends State<_PluginStorePageContent> {
 
   Future<void> _installFromLocal() async {
     try {
-      final file = await openFile(
-        acceptedTypeGroups: const [
-          XTypeGroup(
-            label: 'plugin script',
-            extensions: ['js', 'cjs', 'br'],
-            uniformTypeIdentifiers: ['public.javascript'],
-          ),
-        ],
-      );
+      final file = await pickPluginScriptFile();
       if (file == null) {
         return;
       }
@@ -281,6 +274,7 @@ class _PluginStorePageContentState extends State<_PluginStorePageContent> {
         fileName: file.name,
       );
     } catch (e) {
+      logger.e(e);
       showErrorToast(t.plugin.readLocalPluginFailed(error: e.toString()));
     }
   }

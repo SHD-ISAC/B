@@ -33,6 +33,7 @@ class ObjectBox {
   late final Box<ComicLink> _comicLinkBox;
   late final Box<ComicFollow> _comicFollowBox;
   late final Box<ComicReadPreference> _comicReadPreferenceBox;
+  late final Box<SearchBookmark> _searchBookmarkBox;
 
   void close() {
     store.close();
@@ -60,6 +61,7 @@ class ObjectBox {
     _comicLinkBox = store.box<ComicLink>();
     _comicFollowBox = store.box<ComicFollow>();
     _comicReadPreferenceBox = store.box<ComicReadPreference>();
+    _searchBookmarkBox = store.box<SearchBookmark>();
   }
 
   static Future<ObjectBox> create({String? dbRootPath}) async {
@@ -87,6 +89,7 @@ class ObjectBox {
         final store = Store.attach(getObjectBoxModel(), dbPath);
         return ObjectBox._create(store);
       } catch (e) {
+        logger.e(e);
         // 2. 如果 Attach 失败，尝试 Open
         try {
           final store = await openStore(directory: dbPath);
@@ -141,6 +144,8 @@ class ObjectBox {
 
   Box<ComicReadPreference> get comicReadPreferenceBox =>
       _comicReadPreferenceBox;
+
+  Box<SearchBookmark> get searchBookmarkBox => _searchBookmarkBox;
 
   /// 在当前 isolate 中以只读事务收集所有 ObjectBox 数据并序列化为 JSON。
   ///
@@ -198,6 +203,7 @@ class ObjectBox {
       _comicReadPreferenceBox,
       "ComicReadPreference",
     );
+    _dumpBoxData<SearchBookmark>(_searchBookmarkBox, "SearchBookmark");
 
     logger.d("=========  ObjectBox Data Dump End  =========");
   }
@@ -258,6 +264,10 @@ String _collectObjectBoxDataJson(Store store, bool removeIds) {
     'comicLink': readBox(store.box<ComicLink>(), (item) => item.toJson()),
     'comicReadPreference': readBox(
       store.box<ComicReadPreference>(),
+      (item) => item.toJson(),
+    ),
+    'searchBookmark': readBox(
+      store.box<SearchBookmark>(),
       (item) => item.toJson(),
     ),
   };

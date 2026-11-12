@@ -18,9 +18,10 @@ import 'package:zephyr/page/bookshelf/bloc/folder_shelf_bloc.dart';
 import 'package:zephyr/page/bookshelf/cubit/bookshelf_search_cubit.dart';
 import 'package:zephyr/page/bookshelf/cubit/search_status.dart';
 import 'package:zephyr/page/bookshelf/method/method.dart';
-import 'package:zephyr/page/bookshelf/models/shelf_page_mode.dart';
+import 'package:zephyr/page/bookshelf/models/models.dart';
 import 'package:zephyr/page/bookshelf/service/comic_folder_service.dart';
 import 'package:zephyr/page/bookshelf/service/comic_link_service.dart';
+import 'package:zephyr/page/bookshelf/widgets/folder_target_picker.dart';
 import 'package:zephyr/page/bookshelf/widgets/bookshelf_empty_view.dart';
 import 'package:zephyr/page/bookshelf/widgets/bookshelf_grid_shimmer.dart';
 import 'package:zephyr/page/bookshelf/widgets/bookshelf_loading_view.dart';
@@ -29,6 +30,7 @@ import 'package:zephyr/type/enum.dart';
 import 'package:zephyr/util/text/chinese_convert.dart';
 import 'package:zephyr/widgets/comic_simplify_entry/comic_simplify_entry.dart';
 import 'package:zephyr/widgets/comic_simplify_entry/comic_simplify_entry_grid.dart';
+import 'package:zephyr/widgets/comic_simplify_entry/detail_columns.dart';
 import 'package:zephyr/widgets/comic_simplify_entry/comic_simplify_entry_info.dart';
 import 'package:zephyr/widgets/fluent_dropdown.dart';
 import 'package:zephyr/widgets/toast.dart';
@@ -82,6 +84,21 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
   @override
   bool get wantKeepAlive => true;
 
+  /// 书架 tab 内部路由上的返回拦截点：有待处理返回（退选择/退文件夹）时持有，
+  /// 到根时清掉放行。见 shelf_back_action.dart 头部注释。
+  ///
+  /// 用 entry 而不是 PopScope：PersistentTabView 在非首页 tab 上按返回时，
+  /// 内部 Navigator `canPop == false` 就直接切回首页，事件到不了 PopScope。
+  LocalHistoryEntry? _backEntry;
+
+  /// 程序化释放 entry 时置 true：entry.remove() 会同步触发 onRemove，
+  /// 此时必须跳过 _handleShelfBack，否则切 tab/回根/dispose 都会误回退一级。
+  /// 系统返回消费 entry 时为 false，才真正消费一次返回。
+  bool _removingBackEntry = false;
+
+  /// 上次的路径：listener 里与新 state 比较，只在路径变化时回顶+置显 bar。
+  /// error/选择模式变化走同一 listener，不能顺手把用户藏起来的 bar 弹出来。
+  String? _lastPath;
   @override
   void initState() {
     super.initState();
@@ -95,12 +112,12 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
     if (_isDesktop) {
       HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
     }
+    _removeBackEntry();
     super.dispose();
   }
 
   static bool get _isDesktop =>
       Platform.isWindows || Platform.isMacOS || Platform.isLinux;
-
   bool _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
     if (event.logicalKey != LogicalKeyboardKey.escape) return false;
@@ -108,11 +125,74 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
     final route = ModalRoute.of(context);
     if (route == null || !route.isCurrent) return false;
 
-    final bloc = context.read<FolderShelfBloc>();
-    if (bloc.state.isRoot) return false;
+    return _handleShelfBack(context.read<FolderShelfBloc>().state);
+  }
 
-    bloc.add(const FolderShelfGoBack());
-    return true;
+  /// 书架内返回：选择模式先退选，否则文件夹回退一级；根目录返回 false。
+  /// 返回键（经 LocalHistoryEntry）与桌面 Escape 共用，保证行为一致。
+  bool _handleShelfBack(FolderShelfState state) {
+    switch (shelfBackActionFor(
+      selectionMode: state.selectionMode,
+      isRoot: state.isRoot,
+    )) {
+      case ShelfBackAction.exitSelection:
+        context.read<FolderShelfBloc>().add(
+          const FolderShelfExitSelectionMode(),
+        );
+        return true;
+      case ShelfBackAction.goBack:
+        context.read<FolderShelfBloc>().add(const FolderShelfGoBack());
+        return true;
+      case ShelfBackAction.none:
+        return false;
+    }
+  }
+
+  /// 与 bloc 状态同步 entry 的持有/释放。entry 的 onRemove 即一次返回事件，
+  /// 直接消费状态机；entry 被消费后 onRemove 内按新状态重新同步（无残留时放行）。
+  void _syncBackEntry(FolderShelfState state) {
+    final want = wantShelfBackEntry(
+      isActive: widget.isActive,
+      selectionMode: state.selectionMode,
+      isRoot: state.isRoot,
+    );
+    final has = _backEntry != null;
+    if (want == has) return;
+    if (!want) {
+      _removeBackEntry();
+      return;
+    }
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isCurrent) return;
+    final entry = LocalHistoryEntry(
+      // 书架 AppBar 自绘返回/关闭按钮，不需要框架按 entry 补 leading。
+      impliesAppBarDismissal: false,
+      onRemove: () {
+        _backEntry = null;
+        if (!mounted) return;
+        // 程序化释放（切 tab/回根/dispose）：只清标记，不消费返回。
+        if (_removingBackEntry) return;
+        _handleShelfBack(context.read<FolderShelfBloc>().state);
+        // 状态更新后按新状态重新同步：仍有可退层级则补回 entry，
+        // 到根则保持放行。
+        _syncBackEntry(context.read<FolderShelfBloc>().state);
+      },
+    );
+    _backEntry = entry;
+    route.addLocalHistoryEntry(entry);
+  }
+
+  void _removeBackEntry() {
+    final entry = _backEntry;
+    _backEntry = null;
+    if (entry == null) return;
+    // 同步触发 onRemove：置旗跳过其中的 _handleShelfBack。
+    _removingBackEntry = true;
+    try {
+      entry.remove();
+    } finally {
+      _removingBackEntry = false;
+    }
   }
 
   @override
@@ -123,14 +203,26 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
         FolderShelfLoadRequested(search: widget.search),
       );
     }
+    if (oldWidget.isActive != widget.isActive && mounted) {
+      // 切 tab 时按新可见性同步：后台 tab 释放 entry，避免抢返回；
+      // 前台 tab 按当前 bloc 状态补回 entry。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _syncBackEntry(context.read<FolderShelfBloc>().state);
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
     return BlocConsumer<FolderShelfBloc, FolderShelfState>(
+      // 返回拦截 entry 与 error 提示共用 listener：error、选择模式、
+      // 路径变化都要同步 entry 的持有/释放。
       listenWhen: (previous, current) =>
-          current.error != null && current.error != previous.error,
+          (current.error != null && current.error != previous.error) ||
+          current.selectionMode != previous.selectionMode ||
+          current.currentPath != previous.currentPath,
       listener: (context, state) {
         final error = state.error;
         if (error != null && error.isNotEmpty) {
@@ -138,24 +230,24 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
             context,
           ).showSnackBar(SnackBar(content: Text(error)));
         }
+        if (state.currentPath != _lastPath) {
+          _lastPath = state.currentPath;
+          // 换路径=全新列表：悬浮导航直接置显，不依赖滚动通知。
+          // 靠 jumpTo 间接触发通知的链路不可靠（新列表替换/高度修正会吞掉
+          // 那次通知），内容不够滑时 bar 会永远出不来。
+          _setNavVisible(true);
+        }
+        _syncBackEntry(state);
       },
       builder: (context, state) {
-        return PopScope(
-          canPop: state.isRoot,
-          onPopInvokedWithResult: (didPop, result) {
-            if (!didPop && !state.isRoot) {
-              context.read<FolderShelfBloc>().add(const FolderShelfGoBack());
-            }
-          },
-          child: NotificationListener<ScrollNotification>(
-            onNotification: _onGridScroll,
-            child: Stack(
-              children: [
-                Positioned.fill(child: _buildBody(context)),
-                // 顶部悬浮导航：选择模式下隐藏，由底部悬浮操作条接管。
-                if (!state.selectionMode) ..._buildFloatingNav(context, state),
-              ],
-            ),
+        return NotificationListener<ScrollNotification>(
+          onNotification: _onGridScroll,
+          child: Stack(
+            children: [
+              Positioned.fill(child: _buildBody(context)),
+              // 顶部悬浮导航：选择模式下隐藏，由底部悬浮操作条接管。
+              if (!state.selectionMode) ..._buildFloatingNav(context, state),
+            ],
           ),
         );
       },
@@ -321,6 +413,7 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
     // 历史只有一个多选入口：不用 SpeedDial 展开，直接放同款圆形按钮。
     if (state.mode == ShelfPageMode.history) {
       return FloatingActionButton(
+        heroTag: null,
         shape: roundedRect(16),
         backgroundColor: colorScheme.primaryContainer,
         foregroundColor: colorScheme.onPrimaryContainer,
@@ -391,7 +484,24 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
     return BlocBuilder<BookshelfSearchCubit, BookshelfSearchState>(
       builder: (context, searchState) {
         return BlocBuilder<FolderShelfBloc, FolderShelfState>(
+          // 纯选中变化不重建整表：每行各自订阅自己的选中态（见 _ShelfComicEntry /
+          // _ShelfFolderEntry）。否则每次点选都重建几百行，封面重新 resolve 会闪。
+          buildWhen: (prev, curr) =>
+              prev.folders != curr.folders ||
+              prev.comics != curr.comics ||
+              prev.comicSearchTexts != curr.comicSearchTexts ||
+              prev.folderComicCounts != curr.folderComicCounts ||
+              prev.search != curr.search ||
+              prev.isLoading != curr.isLoading ||
+              prev.error != curr.error ||
+              prev.sortAscending != curr.sortAscending ||
+              prev.selectionMode != curr.selectionMode,
           builder: (context, state) {
+            final detailed = context
+                .watch<GlobalSettingCubit>()
+                .state
+                .bookshelfSetting
+                .detailLayout;
             final keyword = _normalizeSearchText(
               searchState.stateOf(state.mode).keyword,
             );
@@ -428,10 +538,77 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
             }
 
             final comicType = _comicEntryTypeOf(state.mode);
-            final folderSyncIdMap = _buildSyncIdMap(state.mode);
+            final folderSyncIdMap = buildFolderSyncIdMap(
+              _folderTypeOf(state.mode),
+            );
             String folderPathOf(ComicFolder f) =>
                 ComicFolderService.folderPath(f, syncIdMap: folderSyncIdMap);
+            final listPadding = EdgeInsets.fromLTRB(
+              10,
+              state.selectionMode ? 10 : (state.isRoot ? 10 : 64),
+              10,
+              88,
+            );
+            Widget shelfItemBuilder(BuildContext context, int index) {
+              if (index < filteredFolders.length) {
+                final folder = filteredFolders[index];
+                final folderPath = folderPathOf(folder);
+                return _ShelfFolderEntry(
+                  key: ValueKey('folder-${folder.uniqueKey}'),
+                  folder: folder,
+                  folderPath: folderPath,
+                  detailed: detailed,
+                  comicCount: state.folderComicCounts[folderPath],
+                  onFolderAction: (position) =>
+                      _showFolderActions(context, folder, folderPath, position),
+                );
+              }
+              final comicIndex = index - filteredFolders.length;
+              final comic = filteredComics[comicIndex];
+              return _ShelfComicEntry(
+                key: ValueKey('comic-${comic.from}:${comic.id}'),
+                info: comic,
+                type: comicType,
+                detailed: detailed,
+                onComicAction: (info, position) =>
+                    _showComicActions(context, info, position),
+              );
+            }
 
+            // 文件夹与漫画混排：详情模式多列懒加载（见 DetailColumnsSliver）。
+            // 列数只与视口宽有关，build 期快照一次，不进 SliverLayoutBuilder。
+            final columns = detailed
+                ? detailColumnCount(
+                    MediaQuery.sizeOf(context).width - listPadding.horizontal,
+                  )
+                : 1;
+            // 路径 key：换路径时列表 element 销毁重建，原生 offset 就是 0，
+            // 没有 jumpTo 的中间动效（旧列表先闪回顶再换内容，看着像里面滚了一段）。
+            // 同路径刷新（如下拉）key 不变，offset 保留。
+            final shelfList = detailed
+                ? CustomScrollView(
+                    key: ValueKey('shelf-${state.currentPath}'),
+                    slivers: [
+                      SliverPadding(
+                        padding: listPadding,
+                        sliver: DetailColumnsSliver(
+                          columns: columns,
+                          itemCount: totalCount,
+                          itemBuilder: shelfItemBuilder,
+                        ),
+                      ),
+                    ],
+                  )
+                : GridView.builder(
+                    key: ValueKey('shelf-${state.currentPath}'),
+                    // 悬浮物盖在列表上层：子文件夹有面包屑浮栏，留 64px 顶部滚动边距；
+                    // 根目录无顶部悬浮物，选择模式无悬浮物，均保持 10。
+                    // 右下角按钮 56px + bottom 16：底部留 88，避免挡住最后一行漫画。
+                    padding: listPadding,
+                    gridDelegate: buildComicSimplifyEntryGridDelegate(),
+                    itemCount: totalCount,
+                    itemBuilder: shelfItemBuilder,
+                  );
             return RefreshIndicator(
               onRefresh: () async {
                 context.read<FolderShelfBloc>().add(
@@ -440,104 +617,7 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
               },
               child: Stack(
                 children: [
-                  GridView.builder(
-                    // 悬浮物盖在列表上层：子文件夹有面包屑浮栏，留 64px 顶部滚动边距；
-                    // 根目录无顶部悬浮物，选择模式无悬浮物，均保持 10。
-                    // 右下角按钮 56px + bottom 16：底部留 88，避免挡住最后一行漫画。
-                    padding: EdgeInsets.fromLTRB(
-                      10,
-                      state.selectionMode ? 10 : (state.isRoot ? 10 : 64),
-                      10,
-                      88,
-                    ),
-                    gridDelegate: buildComicSimplifyEntryGridDelegate(),
-                    itemCount: totalCount,
-                    itemBuilder: (context, index) {
-                      if (index < filteredFolders.length) {
-                        final folder = filteredFolders[index];
-                        final folderPath = folderPathOf(folder);
-                        final isSelected = state.selectedFolderPaths.contains(
-                          folderPath,
-                        );
-                        return FolderShelfItem(
-                          key: ValueKey('folder-${folder.uniqueKey}'),
-                          folder: folder,
-                          selectionMode: state.selectionMode,
-                          isSelected: isSelected,
-                          onTap: state.selectionMode
-                              ? () => context.read<FolderShelfBloc>().add(
-                                  FolderShelfToggleFolderSelection(folderPath),
-                                )
-                              : () => context.read<FolderShelfBloc>().add(
-                                  FolderShelfEnterFolder(folderPath),
-                                ),
-                          onLongPress: state.selectionMode
-                              ? (details) =>
-                                    context.read<FolderShelfBloc>().add(
-                                      FolderShelfToggleFolderSelection(
-                                        folderPath,
-                                      ),
-                                    )
-                              : (details) => _showFolderActions(
-                                  context,
-                                  folder,
-                                  folderPath,
-                                  details.globalPosition,
-                                ),
-                          onSecondaryTapDown: state.selectionMode
-                              ? null
-                              : (details) => _showFolderActions(
-                                  context,
-                                  folder,
-                                  folderPath,
-                                  details.globalPosition,
-                                ),
-                        );
-                      }
-                      final comicIndex = index - filteredFolders.length;
-                      final comic = filteredComics[comicIndex];
-                      final comicUniqueKey = '${comic.from.trim()}:${comic.id}';
-                      final isComicSelected = state.selectedComicKeys.contains(
-                        comicUniqueKey,
-                      );
-                      return ComicSimplifyEntry(
-                        key: ValueKey('comic-${comic.from}:${comic.id}'),
-                        info: comic,
-                        type: comicType,
-                        selectionMode: state.selectionMode,
-                        isSelected: isComicSelected,
-                        refresh: () => context.read<FolderShelfBloc>().add(
-                          const FolderShelfLoadRequested(),
-                        ),
-                        onTapOverride: state.selectionMode
-                            ? (info) => context.read<FolderShelfBloc>().add(
-                                FolderShelfToggleComicSelection(
-                                  '${info.from.trim()}:${info.id}',
-                                ),
-                              )
-                            : null,
-                        onLongPressOverride: state.selectionMode
-                            ? (info, details) =>
-                                  context.read<FolderShelfBloc>().add(
-                                    FolderShelfToggleComicSelection(
-                                      '${info.from.trim()}:${info.id}',
-                                    ),
-                                  )
-                            : (info, details) => _showComicActions(
-                                context,
-                                info,
-                                details.globalPosition,
-                              ),
-                        onSecondaryTapDown: state.selectionMode
-                            ? null
-                            : (info, details) => _showComicActions(
-                                context,
-                                info,
-                                details.globalPosition,
-                              ),
-                      );
-                    },
-                  ),
+                  shelfList,
                   if (state.isLoading)
                     const Positioned(
                       top: 0,
@@ -545,7 +625,7 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
                       right: 0,
                       child: LinearProgressIndicator(minHeight: 2),
                     ),
-                  _buildSelectionBar(context, state),
+                  _buildSelectionBar(context),
                 ],
               ),
             );
@@ -555,20 +635,32 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
     );
   }
 
-  Widget _buildSelectionBar(BuildContext context, FolderShelfState state) {
+  Widget _buildSelectionBar(BuildContext context) {
+    // 计数/按钮可用态自己订阅：顶层 buildWhen 已跳过纯选中变化，
+    // 这里不订阅就会一直显示旧值。
+    final selectionMode = context.select(
+      (FolderShelfBloc bloc) => bloc.state.selectionMode,
+    );
+    final selectedCount = context.select(
+      (FolderShelfBloc bloc) => bloc.state.selectedCount,
+    );
+    final hasSelection = context.select(
+      (FolderShelfBloc bloc) => bloc.state.hasSelection,
+    );
+    final mode = context.select((FolderShelfBloc bloc) => bloc.state.mode);
     return Positioned(
       bottom: 8,
       left: 8,
       right: 8,
       child: IgnorePointer(
-        ignoring: !state.selectionMode,
+        ignoring: !selectionMode,
         child: AnimatedSlide(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
-          offset: state.selectionMode ? Offset.zero : const Offset(0, 1.0),
+          offset: selectionMode ? Offset.zero : const Offset(0, 1.0),
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 160),
-            opacity: state.selectionMode ? 1 : 0,
+            opacity: selectionMode ? 1 : 0,
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 520),
@@ -595,11 +687,7 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
                                 .add(const FolderShelfExitSelectionMode()),
                             icon: const Icon(Icons.close),
                           ),
-                          Text(
-                            t.bookshelf.selectedCount(
-                              count: state.selectedCount,
-                            ),
-                          ),
+                          Text(t.bookshelf.selectedCount(count: selectedCount)),
                           const SizedBox(width: 8),
                           TextButton(
                             onPressed: () => context
@@ -607,11 +695,11 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
                                 .add(const FolderShelfSelectAll()),
                             child: Text(t.common.selectAll),
                           ),
-                          if (state.mode != ShelfPageMode.history)
+                          if (mode != ShelfPageMode.history)
                             IconButton(
                               visualDensity: VisualDensity.compact,
                               tooltip: t.bookshelf.moveTo,
-                              onPressed: state.hasSelection
+                              onPressed: hasSelection
                                   ? () => _showTargetFolderDialog(
                                       context,
                                       onConfirmed: (targets) {
@@ -623,11 +711,11 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
                                   : null,
                               icon: const Icon(Icons.drive_file_move_outline),
                             ),
-                          if (state.mode != ShelfPageMode.history)
+                          if (mode != ShelfPageMode.history)
                             IconButton(
                               visualDensity: VisualDensity.compact,
                               tooltip: t.bookshelf.copyTo,
-                              onPressed: state.hasSelection
+                              onPressed: hasSelection
                                   ? () => _showTargetFolderDialog(
                                       context,
                                       onConfirmed: (targets) {
@@ -639,19 +727,22 @@ class _FolderShelfPageContentState extends State<_FolderShelfPageContent>
                                   : null,
                               icon: const Icon(Icons.folder_copy_outlined),
                             ),
-                          if (state.mode == ShelfPageMode.download)
+                          if (mode == ShelfPageMode.download)
                             IconButton(
                               visualDensity: VisualDensity.compact,
                               tooltip: t.bookshelf.batchExport,
-                              onPressed: state.hasSelection
-                                  ? () => _batchExportSelected(context, state)
+                              onPressed: hasSelection
+                                  ? () => _batchExportSelected(
+                                      context,
+                                      context.read<FolderShelfBloc>().state,
+                                    )
                                   : null,
                               icon: const Icon(Icons.file_upload_outlined),
                             ),
                           IconButton(
                             visualDensity: VisualDensity.compact,
                             tooltip: t.common.delete,
-                            onPressed: state.hasSelection
+                            onPressed: hasSelection
                                 ? () => _confirmDeleteSelected(context)
                                 : null,
                             icon: const Icon(Icons.delete_outline),
@@ -946,11 +1037,11 @@ Future<void> _showTargetFolderDialog(
   required ValueChanged<Set<String>> onConfirmed,
 }) async {
   final state = context.read<FolderShelfBloc>().state;
+  final mode = state.mode;
   final sourceFolderPaths = selectedFolderPaths ?? state.selectedFolderPaths;
-  final allFolders = ComicFolderService.listAllFolders(
-    _folderTypeOf(state.mode),
-  );
-  final syncIdMap = _buildSyncIdMap(state.mode);
+  final type = _folderTypeOf(mode);
+  final allFolders = ComicFolderService.listAllFolders(type);
+  final syncIdMap = buildFolderSyncIdMap(type);
   final pathMap = {
     for (final folder in allFolders)
       folder.syncId: ComicFolderService.folderPath(
@@ -958,8 +1049,6 @@ Future<void> _showTargetFolderDialog(
         syncIdMap: syncIdMap,
       ),
   };
-  final forest = _buildFolderForest(allFolders, pathMap);
-
   // 排除当前所在文件夹（仅自身）、被选中的文件夹及其子树
   final forbiddenSyncIds = <String>{};
   for (final path in sourceFolderPaths) {
@@ -967,217 +1056,25 @@ Future<void> _showTargetFolderDialog(
       (f) => pathMap[f.syncId] == path,
     );
     if (folder != null) {
-      _collectForbiddenSyncIds(folder.syncId, allFolders, forbiddenSyncIds);
+      collectForbiddenSyncIds(folder.syncId, allFolders, forbiddenSyncIds);
     }
   }
   final currentPath = state.currentPath;
-  final isRoot = currentPath.isEmpty;
-  final currentFolder = isRoot
+  final currentFolder = currentPath.isEmpty
       ? null
       : allFolders.firstWhereOrNull((f) => pathMap[f.syncId] == currentPath);
-  final currentSyncId = currentFolder?.syncId;
 
-  final selectedPaths = <String>{};
-
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) {
-      final expandedPaths = <String>{};
-      return StatefulBuilder(
-        builder: (ctx, setState) {
-          void togglePath(String path) {
-            setState(() {
-              if (selectedPaths.contains(path)) {
-                selectedPaths.remove(path);
-              } else {
-                selectedPaths.add(path);
-              }
-            });
-          }
-
-          return AlertDialog(
-            title: Text(t.bookshelf.selectTargetFolder),
-            content: SizedBox(
-              width: 380,
-              height: 400,
-              child: ListView(
-                children: [
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const SizedBox(width: 48),
-                    title: Text(t.common.root),
-                    trailing: Checkbox(
-                      value: selectedPaths.contains(kComicFolderRootPath),
-                      onChanged: isRoot
-                          ? null
-                          : (_) => togglePath(kComicFolderRootPath),
-                    ),
-                    onTap: isRoot
-                        ? null
-                        : () => togglePath(kComicFolderRootPath),
-                  ),
-                  const Divider(),
-                  ...forest.map(
-                    (node) => _buildFolderTreeTile(
-                      context: ctx,
-                      node: node,
-                      pathMap: pathMap,
-                      expandedPaths: expandedPaths,
-                      forbiddenSyncIds: forbiddenSyncIds,
-                      currentSyncId: currentSyncId,
-                      selectedPaths: selectedPaths,
-                      onToggleExpand: (path) => setState(() {
-                        if (expandedPaths.contains(path)) {
-                          expandedPaths.remove(path);
-                        } else {
-                          expandedPaths.add(path);
-                        }
-                      }),
-                      onSelect: togglePath,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(t.common.cancel),
-              ),
-              FilledButton(
-                onPressed: selectedPaths.isEmpty
-                    ? null
-                    : () {
-                        Navigator.of(dialogContext).pop();
-                        onConfirmed(selectedPaths);
-                      },
-                child: Text(t.common.ok),
-              ),
-            ],
-          );
-        },
-      );
-    },
+  // 根目录下移动/复制时禁用根目录目标（留在原地无意义）。
+  final picked = await showFolderTargetPicker(
+    context,
+    type: type,
+    allowCreateFolder: false,
+    disabledSyncIds: forbiddenSyncIds,
+    rootEnabled: currentPath.isNotEmpty,
+    currentSyncId: currentFolder?.syncId,
   );
-}
-
-class _FolderNode {
-  final ComicFolder folder;
-  final List<_FolderNode> children;
-
-  _FolderNode(this.folder) : children = [];
-}
-
-List<_FolderNode> _buildFolderForest(
-  List<ComicFolder> folders,
-  Map<String, String> pathMap,
-) {
-  final sorted = folders.toList()
-    ..sort(
-      (a, b) => (pathMap[a.syncId] ?? '').compareTo(pathMap[b.syncId] ?? ''),
-    );
-  final map = <String, _FolderNode>{};
-  final roots = <_FolderNode>[];
-  for (final folder in sorted) {
-    final node = _FolderNode(folder);
-    map[folder.syncId] = node;
-    final parentSyncId = folder.parentSyncId;
-    if (parentSyncId == null || parentSyncId.isEmpty) {
-      roots.add(node);
-    } else {
-      map[parentSyncId]?.children.add(node);
-    }
-  }
-  return roots;
-}
-
-Map<String, ComicFolder> _buildSyncIdMap(ShelfPageMode mode) {
-  final allFolders = ComicFolderService.listAllFolders(_folderTypeOf(mode));
-  return {for (final folder in allFolders) folder.syncId: folder};
-}
-
-void _collectForbiddenSyncIds(
-  String syncId,
-  List<ComicFolder> allFolders,
-  Set<String> result,
-) {
-  if (!result.add(syncId)) return;
-  for (final child in allFolders) {
-    if (child.parentSyncId == syncId) {
-      _collectForbiddenSyncIds(child.syncId, allFolders, result);
-    }
-  }
-}
-
-Widget _buildFolderTreeTile({
-  required BuildContext context,
-  required _FolderNode node,
-  required Map<String, String> pathMap,
-  required Set<String> expandedPaths,
-  required Set<String> forbiddenSyncIds,
-  required String? currentSyncId,
-  required Set<String> selectedPaths,
-  required ValueChanged<String> onToggleExpand,
-  required ValueChanged<String> onSelect,
-}) {
-  final path = pathMap[node.folder.syncId] ?? '/${node.folder.name}';
-  final syncId = node.folder.syncId;
-  final isExpanded = expandedPaths.contains(path);
-  final isCurrentPath = currentSyncId != null && syncId == currentSyncId;
-  final isForbidden = isCurrentPath || forbiddenSyncIds.contains(syncId);
-  final hasChildren = node.children.isNotEmpty;
-  final theme = Theme.of(context);
-  final isSelected = selectedPaths.contains(path) && !isForbidden;
-
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      ListTile(
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        leading: hasChildren
-            ? IconButton(
-                icon: Icon(
-                  isExpanded ? Icons.expand_more : Icons.chevron_right,
-                ),
-                onPressed: () => onToggleExpand(path),
-              )
-            : const SizedBox(width: 48),
-        title: Text(
-          node.folder.name,
-          style: isForbidden ? TextStyle(color: theme.disabledColor) : null,
-        ),
-        trailing: Checkbox(
-          value: isSelected,
-          onChanged: isForbidden ? null : (_) => onSelect(path),
-        ),
-        onTap: isForbidden ? null : () => onSelect(path),
-      ),
-      if (isExpanded)
-        Padding(
-          padding: const EdgeInsets.only(left: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: node.children
-                .map(
-                  (child) => _buildFolderTreeTile(
-                    context: context,
-                    node: child,
-                    pathMap: pathMap,
-                    expandedPaths: expandedPaths,
-                    forbiddenSyncIds: forbiddenSyncIds,
-                    currentSyncId: currentSyncId,
-                    selectedPaths: selectedPaths,
-                    onToggleExpand: onToggleExpand,
-                    onSelect: onSelect,
-                  ),
-                )
-                .toList(),
-          ),
-        ),
-    ],
-  );
+  if (picked == null || picked.isEmpty) return;
+  onConfirmed(picked);
 }
 
 ComicFolderType _folderTypeOf(ShelfPageMode mode) {
@@ -1224,10 +1121,12 @@ Future<void> _importComic(BuildContext context) async {
     if (!context.mounted) return;
     showSuccessToast(t.bookshelf.importCompleted(title: result.title));
     context.read<FolderShelfBloc>().add(const FolderShelfLoadRequested());
-  } on ComicImportCancelledException catch (_) {
+  } on ComicImportCancelledException catch (e, st) {
+    logger.e(e, stackTrace: st);
     if (!context.mounted) return;
     showErrorToast(t.common.cancelled);
   } catch (e) {
+    logger.e(e);
     if (!context.mounted) return;
     showErrorToast(t.error.importFailed(error: e.toString()));
   }
@@ -1288,6 +1187,7 @@ Future<void> _batchExportSelected(
     );
     context.read<FolderShelfBloc>().add(const FolderShelfExitSelectionMode());
   } catch (e) {
+    logger.e(e);
     if (!context.mounted) return;
     showErrorToast(t.bookshelf.batchExportFailed(error: e.toString()));
   }
@@ -1315,5 +1215,111 @@ Future<void> _confirmDeleteSelected(BuildContext context) async {
   );
   if (confirmed == true && context.mounted) {
     context.read<FolderShelfBloc>().add(const FolderShelfDeleteSelected());
+  }
+}
+
+/// 文件夹行：只订阅自己的选中态 + 选择模式。
+///
+/// 顶层 buildWhen 已跳过纯选中变化，这里的 select 让点选时只有相关行重建，
+/// 封面/整表不动（见 _buildBody 注释）。
+/// 注意：select 只能出现在行 widget 内部，不能直接写在 sliver 的 itemBuilder 里
+///（会触发 widget is! SliverWithKeepAliveWidget 断言）。
+class _ShelfFolderEntry extends StatelessWidget {
+  const _ShelfFolderEntry({
+    super.key,
+    required this.folder,
+    required this.folderPath,
+    required this.detailed,
+    this.comicCount,
+    required this.onFolderAction,
+  });
+
+  final ComicFolder folder;
+  final String folderPath;
+  final bool detailed;
+  final int? comicCount;
+  final void Function(Offset position) onFolderAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectionMode = context.select(
+      (FolderShelfBloc bloc) => bloc.state.selectionMode,
+    );
+    final isSelected = context.select(
+      (FolderShelfBloc bloc) =>
+          bloc.state.selectedFolderPaths.contains(folderPath),
+    );
+    return FolderShelfItem(
+      folder: folder,
+      selectionMode: selectionMode,
+      isSelected: isSelected,
+      detailed: detailed,
+      comicCount: comicCount,
+      onTap: selectionMode
+          ? () => context.read<FolderShelfBloc>().add(
+              FolderShelfToggleFolderSelection(folderPath),
+            )
+          : () => context.read<FolderShelfBloc>().add(
+              FolderShelfEnterFolder(folderPath),
+            ),
+      onLongPress: selectionMode
+          ? (details) => context.read<FolderShelfBloc>().add(
+              FolderShelfToggleFolderSelection(folderPath),
+            )
+          : (details) => onFolderAction(details.globalPosition),
+      onSecondaryTapDown: selectionMode
+          ? null
+          : (details) => onFolderAction(details.globalPosition),
+    );
+  }
+}
+
+/// 漫画行：只订阅自己的选中态 + 选择模式，同上。
+class _ShelfComicEntry extends StatelessWidget {
+  const _ShelfComicEntry({
+    super.key,
+    required this.info,
+    required this.type,
+    required this.detailed,
+    required this.onComicAction,
+  });
+
+  final ComicSimplifyEntryInfo info;
+  final ComicEntryType type;
+  final bool detailed;
+  final void Function(ComicSimplifyEntryInfo info, Offset position)
+  onComicAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectionMode = context.select(
+      (FolderShelfBloc bloc) => bloc.state.selectionMode,
+    );
+    final comicKey = '${info.from.trim()}:${info.id}';
+    final isSelected = context.select(
+      (FolderShelfBloc bloc) => bloc.state.selectedComicKeys.contains(comicKey),
+    );
+    return ComicSimplifyEntry(
+      info: info,
+      type: type,
+      selectionMode: selectionMode,
+      isSelected: isSelected,
+      detailed: detailed,
+      refresh: () =>
+          context.read<FolderShelfBloc>().add(const FolderShelfLoadRequested()),
+      onTapOverride: selectionMode
+          ? (info) => context.read<FolderShelfBloc>().add(
+              FolderShelfToggleComicSelection(comicKey),
+            )
+          : null,
+      onLongPressOverride: selectionMode
+          ? (info, details) => context.read<FolderShelfBloc>().add(
+              FolderShelfToggleComicSelection(comicKey),
+            )
+          : (info, details) => onComicAction(info, details.globalPosition),
+      onSecondaryTapDown: selectionMode
+          ? null
+          : (info, details) => onComicAction(info, details.globalPosition),
+    );
   }
 }

@@ -3,7 +3,6 @@ use crate::decode;
 use crate::frb_generated::StreamSink;
 use anyhow::{Result, anyhow};
 use flutter_rust_bridge::frb;
-use rquickjs_playground::{configure_http_client, current_http_client_config};
 use std::sync::Once;
 use std::sync::atomic::Ordering;
 use tokio::sync::Semaphore;
@@ -26,10 +25,6 @@ pub fn init_app() {
     }
     INIT_ONCE.call_once(|| {
         crate::api::user_utils::setup_default_user_utils();
-        let mut config = current_http_client_config();
-        config.allow_private_network = true;
-        configure_http_client(config)
-            .expect(&rquickjs_playground::tr!("failed-to-update-http-config"));
     });
 }
 

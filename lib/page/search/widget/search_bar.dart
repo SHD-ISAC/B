@@ -30,17 +30,16 @@ class _SearchBarState extends State<SearchBar> {
   final _keywordDebouncer = Debouncer(milliseconds: 100);
 
   List<({String pluginId, String title})> _sourceOptions(BuildContext context) {
-    final pluginStates = context.read<PluginRegistryCubit>().state;
+    final registry = context.read<PluginRegistryCubit>().state;
     final states = PluginRegistryService.I.sortPlugins(
-      pluginStates.values.where((state) => !state.isDeleted),
+      registry.plugins.values.where((state) => !state.isDeleted),
     );
-    return states.map((state) {
-      final info = PluginRegistryService.I.getCachedPluginInfo(state.uuid);
-      final title = info?['name']?.toString().trim().isNotEmpty == true
-          ? info!['name'].toString().trim()
-          : state.uuid;
-      return (pluginId: state.uuid, title: title);
-    }).toList();
+    return states
+        .map(
+          (state) =>
+              (pluginId: state.uuid, title: registry.pluginName(state.uuid)),
+        )
+        .toList();
   }
 
   @override
@@ -48,9 +47,7 @@ class _SearchBarState extends State<SearchBar> {
     super.initState();
     final initialState = context.read<SearchCubit>().state;
     _aggregateSources = Map<String, bool>.from(initialState.aggregateSources);
-    HistoryWidget.registerPendingKeywordSyncCanceller(
-      _keywordDebouncer.cancel,
-    );
+    HistoryWidget.registerPendingKeywordSyncCanceller(_keywordDebouncer.cancel);
   }
 
   @override
@@ -80,8 +77,10 @@ class _SearchBarState extends State<SearchBar> {
                 onChanged: (keyword) {
                   // 调度时记基线：开火时 cubit 若已被提交/dialog 回写改过，
                   // 说明这次输入已过期，直接丢弃，否则旧词盖掉新提交。
-                  final scheduledBase =
-                      context.read<SearchCubit>().state.searchKeyword;
+                  final scheduledBase = context
+                      .read<SearchCubit>()
+                      .state
+                      .searchKeyword;
                   _keywordDebouncer.run(() {
                     if (!mounted) {
                       return;
@@ -166,15 +165,14 @@ class _SearchBarState extends State<SearchBar> {
       return;
     }
 
-    final newStates = await showDialog<SearchStates>(
+    final result = await showDialog<_SearchDialogResult>(
       context: context,
       builder: (context) =>
           _PluginAdvancedSearchDialog(initialState: state, scheme: scheme),
     );
 
-    if (newStates != null && context.mounted) {
-      searchCubit.update(newStates);
-    }
+    if (result == null || !context.mounted) return;
+    searchCubit.update(result.states);
   }
 
   Future<_AdvancedSearchScheme?> _loadAdvancedSearchScheme(
@@ -252,6 +250,13 @@ class _AdvancedSearchScheme {
   final Map<String, dynamic> values;
 }
 
+/// 搜索页高级搜索对话框的返回：应用筛选。
+class _SearchDialogResult {
+  const _SearchDialogResult({required this.states});
+
+  final SearchStates states;
+}
+
 class _PluginAdvancedSearchDialog extends StatefulWidget {
   const _PluginAdvancedSearchDialog({
     required this.initialState,
@@ -274,7 +279,6 @@ class _PluginAdvancedSearchDialogState
   void initState() {
     super.initState();
     _values = Map<String, dynamic>.from(widget.scheme.values);
-    _values['sortBy'] = _values['sortBy'] ?? widget.initialState.sortBy;
   }
 
   @override
@@ -285,9 +289,9 @@ class _PluginAdvancedSearchDialogState
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: widget.scheme.fields
-            .map((field) => _buildField(context, field))
-            .toList(),
+        children: [
+          ...widget.scheme.fields.map((field) => _buildField(context, field)),
+        ],
       ),
       actions: [
         TextButton(
@@ -296,9 +300,6 @@ class _PluginAdvancedSearchDialogState
         ),
         FilledButton(
           onPressed: () {
-            final sortBy =
-                int.tryParse(_values['sortBy']?.toString() ?? '') ??
-                widget.initialState.sortBy;
             final nextExtern = <String, dynamic>{
               ...widget.initialState.pluginExtern,
             };
@@ -317,9 +318,8 @@ class _PluginAdvancedSearchDialogState
               }
             }
             Navigator.of(context).pop(
-              widget.initialState.copyWith(
-                sortBy: sortBy,
-                pluginExtern: nextExtern,
+              _SearchDialogResult(
+                states: widget.initialState.copyWith(pluginExtern: nextExtern),
               ),
             );
           },

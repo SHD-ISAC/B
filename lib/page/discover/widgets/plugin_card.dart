@@ -1,6 +1,5 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:zephyr/i18n/strings.g.dart';
-import 'package:zephyr/page/discover/cubit/discover_cubit.dart';
 import 'package:zephyr/page/setting/common/setting_ui.dart';
 import 'package:zephyr/plugin/plugin_registry_service.dart';
 import 'package:zephyr/type/pipe.dart';
@@ -13,7 +12,8 @@ class PluginCard extends StatelessWidget {
     super.key,
     required this.pluginUuid,
     required this.pluginState,
-    required this.infoState,
+    required this.info,
+    this.error,
     required this.isToggling,
     required this.onSearch,
     required this.onSettings,
@@ -24,7 +24,12 @@ class PluginCard extends StatelessWidget {
 
   final String pluginUuid;
   final PluginRuntimeState pluginState;
-  final DiscoverPluginInfoState infoState;
+
+  /// 全局 cubit 的 infos[uuid]：null 表示尚未加载（后台 warmup 会补上）。
+  final Map<String, dynamic>? info;
+
+  /// 全局 cubit 的 infoErrors[uuid]：有值表示最近一次 getInfo 失败。
+  final String? error;
   final bool isToggling;
   final VoidCallback onSearch;
   final void Function(String title) onSettings;
@@ -34,13 +39,14 @@ class PluginCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (infoState.loading) {
+    final data = info;
+    if (data == null) {
+      if (error != null) {
+        return _buildError(context, error);
+      }
       return _buildLoading(context);
     }
-    if (infoState.error != null || infoState.data == null) {
-      return _buildError(context, infoState.error);
-    }
-    return _buildLoaded(context, infoState.data!);
+    return _buildLoaded(context, data);
   }
 
   Widget _buildLoading(BuildContext context) {
@@ -105,16 +111,11 @@ class PluginCard extends StatelessWidget {
     final rawFunctions = asJsonList(
       info['functions'] ?? info['function'] ?? const <dynamic>[],
     ).map((item) => asJsonMap(item)).toList();
-    final creator = asJsonMap(info['creator']);
     final pluginName = info['name']?.toString().trim() ?? '';
-    final creatorName = creator['name']?.toString().trim() ?? '';
     final title = pluginName.isNotEmpty
         ? pluginName
-        : (creatorName.isNotEmpty ? creatorName : t.discover.pluginCapability);
-    final iconUrl =
-        info['iconUrl']?.toString().trim() ??
-        creator['coverUrl']?.toString().trim() ??
-        '';
+        : t.discover.pluginCapability;
+    final iconUrl = info['iconUrl']?.toString().trim() ?? '';
     final iconWidget = ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: PluginIcon(
@@ -206,38 +207,49 @@ class PluginCard extends StatelessWidget {
     List<Map<String, dynamic>> rawFunctions,
     ColorScheme colorScheme,
   ) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: rawFunctions.map((function) {
-        final id = function['id']?.toString().trim() ?? '';
-        final text = function['title']?.toString().trim() ?? t.discover.unnamed;
-        var action = asJsonMap(function['action']);
-        if (action.isEmpty && id.isNotEmpty) {
-          action = {
-            'type': 'openPluginFunction',
-            'payload': {'id': id, 'title': text, 'presentation': 'page'},
-          };
-        }
-        final enabled = action.isNotEmpty;
-        return ActionChip(
-          label: Text(text.let(convertChineseForDisplay)),
-          onPressed: enabled ? () => onAction(action) : null,
-          backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.16),
-          disabledColor: colorScheme.surfaceContainerHighest.withValues(
-            alpha: 0.35,
-          ),
-          side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.1)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-          visualDensity: VisualDensity.compact,
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          labelStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: colorScheme.primary.withValues(alpha: 0.78),
-            fontWeight: FontWeight.w500,
-          ),
-        );
-      }).toList(),
+    final chips = rawFunctions.map((function) {
+      final id = function['id']?.toString().trim() ?? '';
+      final text = function['title']?.toString().trim() ?? t.discover.unnamed;
+      var action = asJsonMap(function['action']);
+      if (action.isEmpty && id.isNotEmpty) {
+        action = {
+          'type': 'openPluginFunction',
+          'payload': {'id': id, 'title': text, 'presentation': 'page'},
+        };
+      }
+      final enabled = action.isNotEmpty;
+      return _functionChip(
+        context,
+        colorScheme,
+        label: text.let(convertChineseForDisplay),
+        onPressed: enabled ? () => onAction(action) : null,
+      );
+    }).toList();
+    return Wrap(spacing: 8, runSpacing: 8, children: chips);
+  }
+
+  Widget _functionChip(
+    BuildContext context,
+    ColorScheme colorScheme, {
+    required String label,
+    required VoidCallback? onPressed,
+  }) {
+    return ActionChip(
+      label: Text(label),
+      onPressed: onPressed,
+      backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.16),
+      disabledColor: colorScheme.surfaceContainerHighest.withValues(
+        alpha: 0.35,
+      ),
+      side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.1)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      labelStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
+        color: colorScheme.primary.withValues(alpha: 0.78),
+        fontWeight: FontWeight.w500,
+      ),
     );
   }
 }

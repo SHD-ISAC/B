@@ -59,7 +59,7 @@ objectbox_temp/
 .crashlytics
 # .env.proxy
 
-script/bin/
+script/build/bin/
 windows-installer/src-tauri/resources
 
 # Flatpak related
@@ -108,3 +108,9 @@ third_party/ncnn-src/
 # Native bridge generated files
 compile_commands.json
 native/generated/ir.json
+
+# Windows 本地跑 flutter test 需要，见 test/bookshelf 相关测试
+/objectbox.dll
+
+# Flutter 和 Xcode 生成的 SwiftPM 解析结果
+**/xcshareddata/swiftpm/Package.resolved

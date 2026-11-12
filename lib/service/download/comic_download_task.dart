@@ -447,6 +447,7 @@ Future<void> _saveUnifiedDownloadChapter({
       'order': selectedChapter.order,
       'requestId': selectedChapter.requestId,
       'storageId': selectedChapter.storageId,
+      'groupTitle': selectedChapter.groupTitle,
       'extern': Map<String, dynamic>.from(selectedChapter.extern),
     },
     'docs': chapterResponse.chapter.docs.map((d) => d.toMap()).toList(),
@@ -525,6 +526,7 @@ Map<String, dynamic> _buildDownloadRecordJson(Map<String, dynamic> args) {
     order: selectedRaw['order'] as int,
     requestId: selectedRaw['requestId'] as String?,
     storageId: selectedRaw['storageId'] as String?,
+    groupTitle: selectedRaw['groupTitle'] as String? ?? '',
     extern: Map<String, dynamic>.from(selectedRaw['extern'] as Map),
     images: const [],
   );
@@ -600,7 +602,8 @@ Map<String, dynamic> _buildDownloadRecordJson(Map<String, dynamic> args) {
           jsonDecode(existingRaw['cover'] as String) as Map,
         ),
       );
-    } catch (_) {
+    } catch (e, st) {
+      logger.e(e, stackTrace: st);
       // 旧记录封面 JSON 损坏时继续使用当前详情的空封面。
     }
   }
@@ -748,6 +751,7 @@ UnifiedComicDownloadStoredChapter _buildStoredChapter(
     taskChapterId: selectedChapter.effectiveRequestId,
     // 显式保存 storageChapterId，确保显式指定了 storage key 的插件能正确还原。
     storageChapterId: selectedChapter.effectiveStorageId,
+    groupTitle: selectedChapter.groupTitle,
     images: response.chapter.docs.map((doc) {
       final imageName = _resolveImageDisplayName(doc);
       final imagePath = normalizeStoredAssetPath(doc.path);

@@ -130,6 +130,8 @@ abstract class GlobalSettingState with _$GlobalSettingState {
     @LocaleConverter() @Default(Locale('zh', 'CN')) Locale locale,
     @Default(true) bool localeFollowsSystem,
     @Default(0) int welcomePageNum,
+    @Default(true) bool showPluginHome,
+    @Default(true) bool showPluginCloudFavorite,
     @Default(SyncSettingState()) SyncSettingState syncSetting,
     @Default([]) List<String> maskedKeywords,
     @Default(true) bool socks5ProxyEnabled,
@@ -145,13 +147,14 @@ abstract class GlobalSettingState with _$GlobalSettingState {
     @Default(false) bool backPressExitEnabled,
     @Default(true) bool updateAccelerate,
     @Default(true) bool retryDownloadUntilSuccess,
-    @Default(false) bool oldPageRollbackEnabled,
-    @Default(false) bool cloudFavoritePreferred,
     @Default(false) bool autoFollowOnCollect,
+    @Default(false) bool autoCloudCollectOnLocalFavorite,
     @Default(false) bool leftHandModeEnabled,
     @Default(false) bool clickCoverToStartReading,
     @Default([]) List<String> searchHistory,
     @Default(ProxySettingState()) ProxySettingState proxySetting,
+    // 搜索书签邻页找回：向后最多探测页数（0=只找本页）；向前固定 1 页。
+    @Default(3) int searchBookmarkProbePages,
     @Default(1280.0) double windowWidth,
     @Default(720.0) double windowHeight,
     @Default(0) double windowX,
@@ -284,6 +287,7 @@ abstract class ReadSettingState with _$ReadSettingState {
     @Default(3) int preloadImageCount,
     @Default(1) int preloadChapterCount,
     @Default(false) bool landscapeReader,
+    @Default(false) bool showStatusBar,
     @Default(false) bool doublePageMode,
     @Default(false) bool doublePageSeamless,
     @Default(false) bool doublePageLeadingBlank,
@@ -363,6 +367,8 @@ abstract class BookshelfSettingState with _$BookshelfSettingState {
     @Default('dd') String historySort,
     @Default(false) bool rememberDownloadSort,
     @Default('dd') String downloadSort,
+    @Default(false) bool detailLayout,
+    @Default(false) bool reverseChapters,
   }) = _BookshelfSettingState;
 
   factory BookshelfSettingState.fromJson(Map<String, dynamic> json) =>

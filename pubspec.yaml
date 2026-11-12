@@ -1,7 +1,7 @@
 name: zephyr
-description: "使用Flutter开发的三方哔咔及禁漫应用。"
+description: "使用Flutter开发的漫画阅读应用，使用插件提供漫画源支持。"
 publish_to: none
-version: 3.0.33+2221
+version: 3.0.37+2225
 
 environment:
   sdk: ^3.12.0
@@ -32,7 +32,7 @@ dependencies:
   flutter_animate: ^4.5.2 # UI: 链式动画
   flutter_colorpicker: ^1.1.0 # UI: 颜色选择器
   flutter_speed_dial: ^7.0.0 # UI: 速拨 FAB
-  easy_refresh: ^3.4.0 # UI: 下拉刷新
+  easy_refresh: ^4.0.0 # UI: 下拉刷新
   scrollview_observer: ^1.26.3 # UI: 滚动监听
   material_ui: ^1.0.1 # UI: Flutter 官方 Material 组件
 
@@ -63,7 +63,7 @@ dependencies:
   pool: ^1.5.2 # 工具: 并发资源池
   window_manager: ^0.5.1 # 桌面: 窗口控制
   screen_retriever: ^0.2.2 # 桌面: 屏幕信息
-  tray_manager: ^0.7.0 # 桌面: 系统托盘
+  tray_manager: ^0.8.0 # 桌面: 系统托盘
   win32: ^6.0.1 # 平台: Windows API
   battery_plus: ^7.0.0 # 设备: 电池信息
   permission_guard: ^2.0.1 # 权限: 请求封装
@@ -83,7 +83,6 @@ dependencies:
   logger: ^2.5.0 # 工具: 日志输出
   stack_trace: ^1.12.0 # 工具: 堆栈处理
   collection: ^1.18.0 # 工具: 集合扩展
-  equatable: ^2.0.3 # 工具: 值相等比较
   stream_transform: ^2.1.1 # 工具: Stream 变换
   intl: ^0.20.2 # 国际化: 文案与格式化
   code_assets: ^2.0.0 # FFI: hooks/build.dart 使用的目标平台配置类型
@@ -91,11 +90,11 @@ dependencies:
   hooks: ^2.1.0 # FFI: Dart 构建钩子
   flutter_rust_bridge: ^2.10.0 # FFI: Flutter-Rust 桥接
   ffi: ^2.2.0 # FFI: Dart 原生互操作
-  sentry_flutter: ^10.0.0-alpha.5 # 监控: 崩溃与异常上报
   vm_service: ^15.0.2 # 监控: 运行时内存监控
   worker_manager: ^7.2.9 # 并发: 全局 Isolate 任务池管理
   coreml_upscale: # MacOS/iOS 超分
     path: packages/coreml_upscale
+  flutter_sticky_header: ^0.8.0 # UI: 分组吸顶组头
 
 dev_dependencies:
   # 测试与规范
@@ -114,7 +113,6 @@ dev_dependencies:
   json_serializable: ^6.14.0 # 生成: JSON 序列化生成
 
   # 构建与发布辅助
-  sentry_dart_plugin: ^3.2.1 # 发布: Sentry 构建上传
   flutter_launcher_icons: # 发布: 启动图标生成
   flutter_native_splash: # 发布: 启动画面生成
 
@@ -159,12 +157,6 @@ objectbox:
   output_dir:
     lib: object_box
     test: object_box
-
-sentry:
-  upload_debug_symbols: true
-  upload_source_maps: true
-  project: flutter
-  org: windy-pt
 
 flutter_launcher_icons:
   android: true

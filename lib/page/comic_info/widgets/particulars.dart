@@ -12,8 +12,8 @@ import 'package:zephyr/object_box/model.dart';
 import 'package:zephyr/object_box/objectbox.g.dart';
 import 'package:zephyr/page/comic_info/comic_info.dart';
 import 'package:zephyr/page/comic_info/json/normal/normal_comic_all_info.dart'
-    show ComicInfo;
-import 'package:zephyr/plugin/plugin_registry_service.dart';
+    show ComicInfo, ComicInfoActionItem;
+import 'package:zephyr/cubit/plugin_registry_cubit.dart';
 import 'package:zephyr/src/rust/api/simple.dart';
 import 'package:zephyr/type/enum.dart';
 import 'package:zephyr/type/pipe.dart';
@@ -158,7 +158,8 @@ class _InfoColumnState extends State<_InfoColumn> {
       if (foundDirectory && mounted) {
         setState(() => _storageSize = totalSize);
       }
-    } catch (_) {
+    } catch (e, st) {
+      logger.e(e, stackTrace: st);
       // ignore errors
     }
   }
@@ -187,7 +188,8 @@ class _InfoColumnState extends State<_InfoColumn> {
             encodePath(path: comicId),
           ),
         );
-      } catch (_) {
+      } catch (e, st) {
+        logger.e(e, stackTrace: st);
         // Rust 编码服务尚未就绪时，仍继续统计历史目录。
       }
 
@@ -233,7 +235,9 @@ class _InfoColumnState extends State<_InfoColumn> {
 
   @override
   Widget build(BuildContext context) {
-    final displaySource = _resolvePluginDisplayName(widget.from);
+    final displaySource = context.select<PluginRegistryCubit, String>(
+      (cubit) => cubit.state.pluginName(_normalizePluginId(widget.from)),
+    );
     final titleStyle = context.theme.textTheme.headlineSmall?.copyWith(
       fontWeight: FontWeight.w800,
       height: 1.15,
@@ -312,25 +316,12 @@ class _InfoColumnState extends State<_InfoColumn> {
           spacing: 8,
           runSpacing: 8,
           children: widget.comicInfo.titleMeta
-              .map(
-                (item) =>
-                    _MetaPill(label: item.name.let(convertChineseForDisplay)),
-              )
+              .map((item) => _MetaPill(item: item))
               .toList(),
         ),
         _ContinueReadingBanner(onContinueRead: widget.onContinueRead),
       ],
     );
-  }
-
-  String _resolvePluginDisplayName(String pluginIdRaw) {
-    final pluginId = _normalizePluginId(pluginIdRaw);
-    if (pluginId.isEmpty) {
-      return pluginIdRaw.trim();
-    }
-    final info = PluginRegistryService.I.getCachedPluginInfo(pluginId);
-    final name = info?['name']?.toString().trim() ?? '';
-    return name.isNotEmpty ? name : pluginId;
   }
 
   String _normalizePluginId(String raw) {
@@ -452,9 +443,9 @@ class _ContinueReadingBanner extends StatelessWidget {
 }
 
 class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.label});
+  const _MetaPill({required this.item});
 
-  final String label;
+  final ComicInfoActionItem item;
 
   @override
   Widget build(BuildContext context) {
@@ -479,7 +470,7 @@ class _MetaPill extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: Text(
-              label,
+              item.name.let(convertChineseForDisplay),
               textAlign: TextAlign.center,
               softWrap: true,
               style: context.theme.textTheme.bodySmall?.copyWith(
@@ -494,8 +485,13 @@ class _MetaPill extends StatelessWidget {
 
     return GestureDetector(
       onLongPress: () async {
-        await Clipboard.setData(ClipboardData(text: label));
-        showSuccessToast(t.comicInfo.copied(label: label));
+        final copyText = item.onLongPress?.trim().isNotEmpty == true
+            ? item.onLongPress!.trim()
+            : item.name;
+        await Clipboard.setData(ClipboardData(text: copyText));
+        showSuccessToast(
+          t.comicInfo.copied(label: item.name.let(convertChineseForDisplay)),
+        );
       },
       child: pill,
     );

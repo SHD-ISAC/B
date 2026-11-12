@@ -11,7 +11,6 @@ import 'package:zephyr/main.dart';
 import 'package:zephyr/object_box/migration/compatible.dart';
 import 'package:zephyr/plugin/bridge/dart_tools_bridge.dart';
 import 'package:zephyr/plugin/bridge/plugin_config_bridge.dart';
-import 'package:zephyr/plugin/plugin_cloud_update_service.dart';
 import 'package:zephyr/plugin/plugin_registry_service.dart';
 import 'package:zephyr/service/lifecycle/foreground_task/foreground_task_service.dart';
 import 'package:zephyr/src/rust/api/qjs.dart';
@@ -89,9 +88,6 @@ class _AppBootstrapViewState extends State<AppBootstrapView> {
     updateStatus(t.appBootstrap.initializing);
     await PluginRegistryService.I.init();
     await PluginRegistryService.I.warmupPluginInfos();
-    PluginCloudUpdateService.I.scheduleSilentCloudUpdate(
-      delay: const Duration(minutes: 1),
-    );
     unawaited(() async {
       try {
         await PluginRegistryService.I.initializeActivePluginRuntimes();

@@ -1,6 +1,8 @@
-import 'package:auto_route/annotations.dart';
+import 'package:auto_route/auto_route.dart';
+import 'package:zephyr/config/router/router.gr.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:zephyr/config/global/global_setting.dart';
 import 'package:zephyr/page/comic_list/cubit/comic_list_cubit.dart';
 import 'package:zephyr/page/comic_list/models/comic_list_scene.dart';
 import 'package:zephyr/i18n/strings.g.dart';
@@ -95,15 +97,39 @@ class _ComicListViewState extends State<_ComicListView>
           children: [
             Text(state.sceneError!),
             const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: () => context.read<ComicListCubit>().reload(),
-              child: Text(t.comicList.reload),
-            ),
+            if (state.sceneLoginPluginId.isNotEmpty)
+              Wrap(
+                spacing: 12,
+                alignment: WrapAlignment.center,
+                children: [
+                  FilledButton.icon(
+                    onPressed: () async {
+                      await context.pushRoute(
+                        LoginRoute(from: state.sceneLoginPluginId),
+                      );
+                      if (context.mounted) {
+                        context.read<ComicListCubit>().reload();
+                      }
+                    },
+                    icon: const Icon(Icons.login_outlined),
+                    label: Text(t.login.loginButton),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.read<ComicListCubit>().reload(),
+                    icon: const Icon(Icons.refresh),
+                    label: Text(t.comicList.reload),
+                  ),
+                ],
+              )
+            else
+              ElevatedButton(
+                onPressed: () => context.read<ComicListCubit>().reload(),
+                child: Text(t.comicList.reload),
+              ),
           ],
         ),
       );
     }
-
     if (state.requiresFilter &&
         state.filterLoading &&
         !state.hasResolvedFilter) {
@@ -119,10 +145,36 @@ class _ComicListViewState extends State<_ComicListView>
           children: [
             Text(state.filterError!),
             const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: () => context.read<ComicListCubit>().loadFilter(),
-              child: Text(t.comicList.reload),
-            ),
+            if (state.filterLoginPluginId.isNotEmpty)
+              Wrap(
+                spacing: 12,
+                alignment: WrapAlignment.center,
+                children: [
+                  FilledButton.icon(
+                    onPressed: () async {
+                      await context.pushRoute(
+                        LoginRoute(from: state.filterLoginPluginId),
+                      );
+                      if (context.mounted) {
+                        context.read<ComicListCubit>().loadFilter();
+                      }
+                    },
+                    icon: const Icon(Icons.login_outlined),
+                    label: Text(t.login.loginButton),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        context.read<ComicListCubit>().loadFilter(),
+                    icon: const Icon(Icons.refresh),
+                    label: Text(t.comicList.reload),
+                  ),
+                ],
+              )
+            else
+              ElevatedButton(
+                onPressed: () => context.read<ComicListCubit>().loadFilter(),
+                child: Text(t.comicList.reload),
+              ),
           ],
         ),
       );
@@ -155,6 +207,11 @@ class _ComicListViewState extends State<_ComicListView>
       coreBuilder: (page) => {'page': page, ...listCore},
       externBuilder: (_) => listExtern,
       collectionTargetId: collectionTargetId,
+      detailed: context
+          .watch<GlobalSettingCubit>()
+          .state
+          .bookshelfSetting
+          .detailLayout,
     );
   }
 

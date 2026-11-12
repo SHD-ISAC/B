@@ -5,13 +5,8 @@
     <key>com.apple.security.app-sandbox</key>
     <false/>
 
+    <!-- Ad hoc-signed builds load bundled Flutter and Rust libraries without a Team ID. -->
     <key>com.apple.security.cs.disable-library-validation</key>
-    <true/>
-
-	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-	<true/>
-
-    <key>com.apple.security.cs.allow-jit</key>
     <true/>
 
     <key>com.apple.security.files.bookmarks.app-scope</key>

@@ -1,10 +1,6 @@
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:zephyr/main.dart';
 import 'package:zephyr/object_box/model.dart';
 import 'package:zephyr/object_box/objectbox.g.dart';
-import 'package:zephyr/plugin/models/cloud_plugin_manifest_internal.dart';
 import 'package:zephyr/plugin/plugin_registry_service.dart';
 import 'package:zephyr/plugin/utils/plugin_cloud_download_utils.dart';
 import 'package:zephyr/plugin/utils/plugin_update_channel_utils.dart';
@@ -15,114 +11,6 @@ class PluginCloudUpdateService {
   PluginCloudUpdateService._();
   static final PluginCloudUpdateService I = PluginCloudUpdateService._();
 
-  bool _silentCloudUpdateScheduled = false;
-  Timer? _silentCloudUpdateTimer;
-  bool _silentCloudUpdateRunning = false;
-
-  void scheduleSilentCloudUpdate({
-    Duration delay = const Duration(minutes: 5),
-  }) {
-    if (_silentCloudUpdateScheduled) {
-      return;
-    }
-    _silentCloudUpdateScheduled = true;
-    _silentCloudUpdateTimer?.cancel();
-    _silentCloudUpdateTimer = Timer(delay, () {
-      unawaited(runSilentCloudUpdateOnce());
-    });
-  }
-
-  Future<void> runSilentCloudUpdateOnce() async {
-    if (_silentCloudUpdateRunning) {
-      return;
-    }
-    _silentCloudUpdateRunning = true;
-    try {
-      await silentUpdateFromCloud();
-    } catch (e, st) {
-      logger.w('静默更新插件失败', error: e, stackTrace: st);
-    } finally {
-      _silentCloudUpdateRunning = false;
-    }
-  }
-
-  /// 静默自动更新：
-  /// - 在云端列表中的插件：只走列表 version / 下载坐标
-  /// - 不在列表中的插件：只走自身 npmName / updateUrl
-  /// 两条路径互不回退。
-  Future<void> silentUpdateFromCloud() async {
-    final localPlugins = PluginRegistryService.I.snapshot.values
-        .where((item) => !item.isDeleted)
-        .toList();
-    if (localPlugins.isEmpty) {
-      return;
-    }
-
-    var cloudByUuid = <String, CloudPluginCatalogItem>{};
-    try {
-      final cloudItems = await _fetchCloudPluginCatalog();
-      cloudByUuid = {
-        for (final item in cloudItems)
-          if (item.manifest.uuid.trim().isNotEmpty)
-            item.manifest.uuid.trim(): item,
-      };
-    } catch (e, st) {
-      logger.w('静默更新拉取云端列表失败，将全部尝试自身更新通道', error: e, stackTrace: st);
-    }
-
-    final inList = <PluginRuntimeState>[];
-    final outList = <PluginRuntimeState>[];
-    for (final local in localPlugins) {
-      if (cloudByUuid.containsKey(local.uuid)) {
-        inList.add(local);
-      } else {
-        outList.add(local);
-      }
-    }
-
-    var updatedCount = 0;
-
-    for (final local in inList) {
-      final cloud = cloudByUuid[local.uuid];
-      if (cloud == null) {
-        continue;
-      }
-      try {
-        final updated = await _tryUpdateFromCloudCatalog(
-          local: local,
-          cloud: cloud,
-        );
-        if (updated) {
-          updatedCount++;
-        }
-      } catch (e, st) {
-        logger.w('插件静默更新失败(列表): ${local.uuid}', error: e, stackTrace: st);
-      }
-    }
-
-    if (outList.isNotEmpty) {
-      final results = await Future.wait(
-        outList.map((local) async {
-          try {
-            return await _tryUpdateFromSelfChannel(
-              local: local,
-              sourceLabel: '静默更新(自身通道)',
-            );
-          } catch (e, st) {
-            logger.w('插件静默更新失败(自身通道): ${local.uuid}', error: e, stackTrace: st);
-            return false;
-          }
-        }),
-        eagerError: false,
-      );
-      updatedCount += results.where((ok) => ok).length;
-    }
-
-    if (updatedCount > 0) {
-      logger.i('静默更新完成，共更新 $updatedCount 个插件');
-    }
-  }
-
   /// 插件设置「同步」：固定走 npm / updateUrl 自身通道。
   ///
   /// 返回是否实际下载并应用了新版本。
@@ -132,46 +20,6 @@ class PluginCloudUpdateService {
       throw StateError('插件不存在或已删除');
     }
 
-    return _tryUpdateFromSelfChannel(
-      local: local,
-      sourceLabel: '手动同步',
-      forceWhenSameVersion: false,
-    );
-  }
-
-  Future<bool> _tryUpdateFromCloudCatalog({
-    required PluginRuntimeState local,
-    required CloudPluginCatalogItem cloud,
-  }) async {
-    final updateUrl = cloud.manifest.updateUrl.trim();
-    final npmName = cloud.manifest.npmName.trim();
-    if (updateUrl.isEmpty && npmName.isEmpty) {
-      return false;
-    }
-    if (!_shouldUpdateVersion(
-      localVersion: local.version,
-      remoteVersion: cloud.manifest.version,
-    )) {
-      return false;
-    }
-
-    final payload = await _downloadCloudPluginUpdateWithRetry(
-      repo: cloud.repo,
-      updateUrl: updateUrl,
-      expectedUuid: local.uuid,
-      cloudVersion: cloud.manifest.version,
-      npmName: npmName,
-      sourceLabel: '静默更新: ${cloud.repo}',
-    );
-    await _applyPluginUpdate(local: local, payload: payload);
-    return true;
-  }
-
-  Future<bool> _tryUpdateFromSelfChannel({
-    required PluginRuntimeState local,
-    required String sourceLabel,
-    bool forceWhenSameVersion = false,
-  }) async {
     final channel = await _resolveSelfUpdateChannel(local.uuid);
     final npmName = channel.npmName;
     final updateUrl = channel.updateUrl;
@@ -184,20 +32,19 @@ class PluginCloudUpdateService {
       npmName: npmName,
       updateUrl: updateUrl,
     );
-    if (!forceWhenSameVersion &&
-        !_shouldUpdateVersion(
-          localVersion: local.version,
-          remoteVersion: remoteVersion,
-        )) {
+    if (compareVersion(remoteVersion, local.version) <= 0) {
       return false;
     }
 
-    final payload = await _downloadSelfChannelUpdateWithRetry(
+    final payload = await _downloadWithRetry(
       expectedUuid: local.uuid,
-      npmName: npmName,
-      updateUrl: updateUrl,
-      remoteVersion: remoteVersion,
-      sourceLabel: sourceLabel,
+      download: () => _downloadAndVerify(
+        expectedUuid: local.uuid,
+        npmName: npmName,
+        updateUrl: updateUrl,
+        remoteVersion: remoteVersion,
+        sourceLabel: '手动同步',
+      ),
     );
     await _applyPluginUpdate(local: local, payload: payload);
     return true;
@@ -232,61 +79,6 @@ class PluginCloudUpdateService {
     return _SelfUpdateChannel(
       npmName: readNpmNameFromInfo(info),
       updateUrl: readUpdateUrlFromInfo(info),
-    );
-  }
-
-  Future<List<CloudPluginCatalogItem>> _fetchCloudPluginCatalog() async {
-    final payload = await fetchCloudPluginListWithCdnFallback();
-    final decoded = const JsonCodec().decode(payload);
-    return asJsonList(decoded)
-        .map((item) => CloudPluginCatalogItem.fromJson(asJsonMap(item)))
-        .where((item) => item.manifest.uuid.trim().isNotEmpty)
-        .toList();
-  }
-
-  bool _shouldUpdateVersion({
-    required String localVersion,
-    required String remoteVersion,
-  }) {
-    return compareVersion(remoteVersion, localVersion) > 0;
-  }
-
-  Future<_PluginUpdatePayload> _downloadCloudPluginUpdateWithRetry({
-    required String repo,
-    required String updateUrl,
-    required String expectedUuid,
-    required String cloudVersion,
-    required String npmName,
-    required String sourceLabel,
-  }) async {
-    return _downloadWithRetry(
-      expectedUuid: expectedUuid,
-      download: () => _downloadAndVerify(
-        expectedUuid: expectedUuid,
-        npmName: npmName,
-        remoteVersion: cloudVersion,
-        updateUrl: updateUrl,
-        sourceLabel: sourceLabel,
-      ),
-    );
-  }
-
-  Future<_PluginUpdatePayload> _downloadSelfChannelUpdateWithRetry({
-    required String expectedUuid,
-    required String npmName,
-    required String updateUrl,
-    required String remoteVersion,
-    required String sourceLabel,
-  }) async {
-    return _downloadWithRetry(
-      expectedUuid: expectedUuid,
-      download: () => _downloadAndVerify(
-        expectedUuid: expectedUuid,
-        npmName: npmName,
-        remoteVersion: remoteVersion,
-        updateUrl: updateUrl,
-        sourceLabel: sourceLabel,
-      ),
     );
   }
 

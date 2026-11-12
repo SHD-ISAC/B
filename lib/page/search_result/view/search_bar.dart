@@ -12,9 +12,7 @@ import 'package:zephyr/widgets/multi_choice_list_dialog.dart';
 import 'package:zephyr/widgets/toast.dart';
 
 class SearchResultBar extends StatelessWidget implements PreferredSizeWidget {
-  final SearchEvent searchEvent;
-
-  const SearchResultBar({super.key, required this.searchEvent});
+  const SearchResultBar({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +110,7 @@ class SearchResultBar extends StatelessWidget implements PreferredSizeWidget {
       showWarningToast(t.search.advancedSearchNotSupported);
       return;
     }
-    final newStates = await showDialog<SearchStates>(
+    final result = await showDialog<_AdvancedSearchDialogResult>(
       context: context,
       builder: (context) => _PluginAdvancedSearchDialog(
         initialState: searchCubit.state,
@@ -120,8 +118,8 @@ class SearchResultBar extends StatelessWidget implements PreferredSizeWidget {
       ),
     );
 
-    if (newStates == null) return;
-    searchCubit.update(newStates);
+    if (result == null) return;
+    searchCubit.update(result.states);
     if (!context.mounted) return;
 
     final searchBloc = context.read<SearchBloc>();
@@ -206,6 +204,13 @@ class _AdvancedSearchScheme {
   final Map<String, dynamic> values;
 }
 
+/// 高级搜索对话框的返回：应用筛选。
+class _AdvancedSearchDialogResult {
+  const _AdvancedSearchDialogResult({required this.states});
+
+  final SearchStates states;
+}
+
 class _PluginAdvancedSearchDialog extends StatefulWidget {
   const _PluginAdvancedSearchDialog({
     required this.initialState,
@@ -228,7 +233,6 @@ class _PluginAdvancedSearchDialogState
   void initState() {
     super.initState();
     _values = Map<String, dynamic>.from(widget.scheme.values);
-    _values['sortBy'] = _values['sortBy'] ?? widget.initialState.sortBy;
   }
 
   @override
@@ -239,9 +243,9 @@ class _PluginAdvancedSearchDialogState
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: widget.scheme.fields
-            .map((field) => _buildField(context, field))
-            .toList(),
+        children: [
+          ...widget.scheme.fields.map((field) => _buildField(context, field)),
+        ],
       ),
       actions: [
         TextButton(
@@ -250,9 +254,6 @@ class _PluginAdvancedSearchDialogState
         ),
         FilledButton(
           onPressed: () {
-            final sortBy =
-                int.tryParse(_values['sortBy']?.toString() ?? '') ??
-                widget.initialState.sortBy;
             final nextExtern = <String, dynamic>{
               ...widget.initialState.pluginExtern,
             };
@@ -271,9 +272,8 @@ class _PluginAdvancedSearchDialogState
               }
             }
             Navigator.of(context).pop(
-              widget.initialState.copyWith(
-                sortBy: sortBy,
-                pluginExtern: nextExtern,
+              _AdvancedSearchDialogResult(
+                states: widget.initialState.copyWith(pluginExtern: nextExtern),
               ),
             );
           },

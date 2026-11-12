@@ -62,25 +62,27 @@ class AppDelegate: FlutterAppDelegate {
     }
 
     // mainWindow 可能还未就绪，回退到遍历所有 window
-    guard let controller = (NSApp.mainWindow?.contentViewController
-        ?? NSApp.windows.first(where: { $0.contentViewController is FlutterViewController })?.contentViewController) as? FlutterViewController else {
-      super.applicationDidFinishLaunching(notification)
-      return
-    }
-    let channel = FlutterMethodChannel(name: "com.breeze.macos/activity", binaryMessenger: controller.engine.binaryMessenger)
+    if let controller = (NSApp.mainWindow?.contentViewController
+        ?? NSApp.windows.first(where: { $0.contentViewController is FlutterViewController })?.contentViewController) as? FlutterViewController {
+      let channel = FlutterMethodChannel(name: "com.breeze.macos/activity", binaryMessenger: controller.engine.binaryMessenger)
 
-    channel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
-      switch call.method {
-      case "startActivity":
-        self?.startActivity(result: result)
-      case "stopActivity":
-        self?.stopActivity(result: result)
-      default:
-        result(FlutterMethodNotImplemented)
+      channel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
+        switch call.method {
+        case "startActivity":
+          self?.startActivity(result: result)
+        case "stopActivity":
+          self?.stopActivity(result: result)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
       }
     }
 
-    super.applicationDidFinishLaunching(notification)
+    // FlutterAppDelegate 在部分 macOS/Flutter 组合下没有实现这个 selector。
+    let launchSelector = #selector(NSApplicationDelegate.applicationDidFinishLaunching(_:))
+    if FlutterAppDelegate.instancesRespond(to: launchSelector) {
+      super.applicationDidFinishLaunching(notification)
+    }
   }
 
   private func startActivity(result: @escaping FlutterResult) {

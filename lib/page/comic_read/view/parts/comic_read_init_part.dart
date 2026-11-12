@@ -67,6 +67,38 @@ extension _ComicReadInitPart on _ComicReadPageState {
           if (!mounted) return;
           _syncVolumeInterception();
         });
+    // 本漫覆盖改了音量键也要重同步（读侧已是有效值）。
+    _perComicVolumeKeySubscription = context
+        .read<ComicReadPreferenceCubit>()
+        .stream
+        .map((state) => state.override?.setting.volumeKeyPageTurn)
+        .distinct()
+        .listen((_) {
+          if (!mounted) return;
+          _syncVolumeInterception();
+        });
+  }
+
+  /// 显示状态栏开关变化时重应用系统栏（全局+本漫覆盖）。
+  void _initShowStatusBarSubscription() {
+    _showStatusBarSubscription = context
+        .read<GlobalSettingCubit>()
+        .stream
+        .map((state) => state.readSetting.showStatusBar)
+        .distinct()
+        .listen((_) {
+          if (!mounted) return;
+          _syncSystemUi(force: true);
+        });
+    _perComicShowStatusBarSubscription = context
+        .read<ComicReadPreferenceCubit>()
+        .stream
+        .map((state) => state.override?.setting.showStatusBar)
+        .distinct()
+        .listen((_) {
+          if (!mounted) return;
+          _syncSystemUi(force: true);
+        });
   }
 
   // 初始化历史记录控制器，处理进度恢复与落盘。
@@ -74,6 +106,7 @@ extension _ComicReadInitPart on _ComicReadPageState {
     // 周期性保存的回调可能在 widget 卸载后仍被触发一次，
     // 因此在这里直接拿到 cubit 引用，避免闭包中继续使用 BuildContext。
     final globalSettingCubit = context.read<GlobalSettingCubit>();
+    final perComicCubit = context.read<ComicReadPreferenceCubit>();
     final readerCubit = context.read<ReaderCubit>();
     final seamlessCubit = context.read<ReaderSeamlessCubit>();
 
@@ -84,7 +117,10 @@ extension _ComicReadInitPart on _ComicReadPageState {
       comicInfo: widget.comicInfo,
       stringSelectCubit: context.read<StringSelectCubit>(),
       getStoredPageIndex: () {
-        final setting = globalSettingCubit.state.readSetting;
+        final setting = ComicReadPreferenceService.resolveEffective(
+          globalSettingCubit.state.readSetting,
+          perComicCubit.state.override,
+        );
         final globalSlotIndex = readerCubit.state.currentSlot;
         final slotIndex = seamlessCubit.isSeamlessEnabled()
             ? seamlessCubit.mapGlobalToLocalSlot(globalSlotIndex)

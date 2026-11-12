@@ -11,6 +11,7 @@ import 'package:zephyr/service/lifecycle/foreground_task/foreground_task_service
 import 'package:zephyr/widgets/fluent_dropdown.dart';
 import 'package:zephyr/widgets/gesture_lock.dart';
 import 'package:zephyr/widgets/toast.dart';
+import 'package:zephyr/main.dart';
 
 @RoutePage()
 class AppBehaviorSettingPage extends StatefulWidget {
@@ -23,33 +24,28 @@ class AppBehaviorSettingPage extends StatefulWidget {
 class _AppBehaviorSettingPageState extends State<AppBehaviorSettingPage> {
   DesktopCloseBehavior _desktopCloseBehavior = DesktopCloseBehavior.ask;
 
-  List<String> _splashPageList(bool oldPageRollbackEnabled) {
-    if (oldPageRollbackEnabled) {
-      return [
-        t.navigation.home,
-        t.navigation.rank,
-        t.navigation.bookshelf,
-        t.navigation.discover,
-        t.navigation.more,
-      ];
-    }
-    return [t.navigation.bookshelf, t.navigation.discover, t.navigation.more];
+  List<String> _splashPageList(GlobalSettingState state) {
+    return [
+      if (state.showPluginHome) t.navigation.home,
+      if (state.showPluginCloudFavorite) t.oldHome.cloudFavorite,
+      t.navigation.bookshelf,
+      t.navigation.discover,
+      t.navigation.more,
+    ];
   }
 
-  Map<String, int> _splashPageMap(bool oldPageRollbackEnabled) {
-    if (oldPageRollbackEnabled) {
-      return {
-        t.navigation.home: 0,
-        t.navigation.rank: 1,
-        t.navigation.bookshelf: 2,
-        t.navigation.discover: 3,
-        t.navigation.more: 4,
-      };
-    }
+  Map<String, int> _splashPageMap(GlobalSettingState state) {
+    final labels = _splashPageList(state);
+    final visibleBaseIndexes = [
+      if (state.showPluginHome) 0,
+      if (state.showPluginCloudFavorite) 1,
+      2,
+      3,
+      4,
+    ];
+    assert(labels.length == visibleBaseIndexes.length);
     return {
-      t.navigation.bookshelf: 0,
-      t.navigation.discover: 1,
-      t.navigation.more: 2,
+      for (var i = 0; i < labels.length; i++) labels[i]: visibleBaseIndexes[i],
     };
   }
 
@@ -85,9 +81,8 @@ class _AppBehaviorSettingPageState extends State<AppBehaviorSettingPage> {
           if (Platform.isAndroid) _androidKeepAlive(state, cubit),
           if (Platform.isAndroid) _backPressExit(state, cubit),
           _appLockSetting(state, cubit),
-          _oldPageRollback(state, cubit),
-          _cloudFavoritePreferred(state, cubit),
           _autoFollowOnCollect(state, cubit),
+          _autoCloudCollectOnLocalFavorite(state, cubit),
           _leftHandMode(state, cubit),
           _clickCoverToStartReading(state, cubit),
           const SizedBox(height: 32),
@@ -97,11 +92,14 @@ class _AppBehaviorSettingPageState extends State<AppBehaviorSettingPage> {
   }
 
   Widget _splashPage(GlobalSettingState state, GlobalSettingCubit cubit) {
-    final splashPageList = _splashPageList(state.oldPageRollbackEnabled);
-    final splashPage = _splashPageMap(state.oldPageRollbackEnabled);
-    final selectedIndex = splashPageList.isEmpty
-        ? 0
-        : state.welcomePageNum.clamp(0, splashPageList.length - 1);
+    final splashPageList = _splashPageList(state);
+    final splashPage = _splashPageMap(state);
+    // welcomePageNum 存的是规范序号；隐藏中的序号回退到第一个可见页。
+    final selectedBaseIndex = splashPage.containsValue(state.welcomePageNum)
+        ? state.welcomePageNum
+        : splashPage.values.first;
+    final selectedLabel =
+        splashPageList[splashPage.values.toList().indexOf(selectedBaseIndex)];
 
     final splashPageItems = {for (final page in splashPageList) page: page};
 
@@ -110,52 +108,17 @@ class _AppBehaviorSettingPageState extends State<AppBehaviorSettingPage> {
       title: Text(t.settings.splashPage),
       subtitle: Text(t.settings.splashPageSubtitle),
       trailing: FluentDropdown<String>(
-        value: splashPageList[selectedIndex],
-        displayValue: splashPageList[selectedIndex],
+        value: selectedLabel,
+        displayValue: selectedLabel,
         items: splashPageItems,
         onChanged: (String value) {
-          if (value == splashPageList[selectedIndex]) return;
+          if (value == selectedLabel) return;
           showSuccessToast(t.common.restartToTakeEffect);
           cubit.updateState(
             (current) => current.copyWith(welcomePageNum: splashPage[value]!),
           );
         },
       ),
-    );
-  }
-
-  Widget _oldPageRollback(GlobalSettingState state, GlobalSettingCubit cubit) {
-    return SwitchListTile(
-      secondary: const Icon(Icons.restore_outlined),
-      title: Text(t.settings.oldPageRollback),
-      subtitle: Text(t.settings.oldPageRollbackSubtitle),
-      thumbIcon: kSettingSwitchThumbIcon,
-      value: state.oldPageRollbackEnabled,
-      onChanged: (bool value) {
-        cubit.updateState(
-          (current) => current.copyWith(oldPageRollbackEnabled: value),
-        );
-        showSuccessToast(t.common.restartToTakeEffect);
-      },
-    );
-  }
-
-  Widget _cloudFavoritePreferred(
-    GlobalSettingState state,
-    GlobalSettingCubit cubit,
-  ) {
-    return SwitchListTile(
-      secondary: const Icon(Icons.cloud_outlined),
-      title: Text(t.settings.cloudFavoritePreferred),
-      subtitle: Text(t.settings.cloudFavoritePreferredSubtitle),
-      thumbIcon: kSettingSwitchThumbIcon,
-      value: state.cloudFavoritePreferred,
-      onChanged: (bool value) {
-        cubit.updateState(
-          (current) => current.copyWith(cloudFavoritePreferred: value),
-        );
-        showSuccessToast(t.common.settingSaved);
-      },
     );
   }
 
@@ -172,6 +135,25 @@ class _AppBehaviorSettingPageState extends State<AppBehaviorSettingPage> {
       onChanged: (bool value) {
         cubit.updateState(
           (current) => current.copyWith(autoFollowOnCollect: value),
+        );
+        showSuccessToast(t.common.settingSaved);
+      },
+    );
+  }
+
+  Widget _autoCloudCollectOnLocalFavorite(
+    GlobalSettingState state,
+    GlobalSettingCubit cubit,
+  ) {
+    return SwitchListTile(
+      secondary: const Icon(Icons.cloud_sync_outlined),
+      title: Text(t.settings.autoCloudCollectOnLocalFavorite),
+      subtitle: Text(t.settings.autoCloudCollectOnLocalFavoriteSubtitle),
+      thumbIcon: kSettingSwitchThumbIcon,
+      value: state.autoCloudCollectOnLocalFavorite,
+      onChanged: (bool value) {
+        cubit.updateState(
+          (current) => current.copyWith(autoCloudCollectOnLocalFavorite: value),
         );
         showSuccessToast(t.common.settingSaved);
       },
@@ -232,6 +214,7 @@ class _AppBehaviorSettingPageState extends State<AppBehaviorSettingPage> {
           }
           showSuccessToast(t.common.settingSaved);
         } catch (e) {
+          logger.e(e);
           cubit.updateState(
             (current) => current.copyWith(androidKeepAliveEnabled: !value),
           );

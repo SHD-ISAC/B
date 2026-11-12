@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:auto_route/auto_route.dart';
-import 'package:file_selector/file_selector.dart';
+import 'package:zephyr/plugin/utils/plugin_local_file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -16,6 +16,7 @@ import 'package:zephyr/page/plugin_settings/widgets/plugin_settings_content.dart
 import 'package:zephyr/plugin/plugin_cloud_update_service.dart';
 import 'package:zephyr/plugin/plugin_install_service.dart';
 import 'package:zephyr/plugin/plugin_registry_service.dart';
+import 'package:zephyr/plugin/utils/plugin_cloud_download_utils.dart';
 import 'package:zephyr/util/event/event.dart';
 import 'package:zephyr/util/event/webview_observe_bus.dart';
 import 'package:zephyr/util/json/json_value.dart';
@@ -447,7 +448,8 @@ class _PluginSettingsPageViewState extends State<_PluginSettingsPageView> {
     final colorScheme = Theme.of(context).colorScheme;
     final pluginState = context
         .watch<PluginRegistryCubit>()
-        .state[widget.pluginUuid];
+        .state
+        .plugins[widget.pluginUuid];
     final debugEnabled = pluginState?.debug ?? false;
     final debugUrl = pluginState?.debugUrl ?? '';
     final deleted = pluginState?.isDeleted == true;
@@ -486,10 +488,30 @@ class _PluginSettingsPageViewState extends State<_PluginSettingsPageView> {
             onUpdateDebugConfig: _updateDebugConfig,
             onConfirmDeletePlugin: _confirmDeletePlugin,
             onUpdatePlugin: _updatePlugin,
+            onOpenLoginPage: _openLoginPage,
+            onOpenDetailPage: _openDetailPage,
             onCommitField: _commitField,
             onRunAction: (action) => _runAction(context, action),
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _openLoginPage() async {
+    await context.pushRoute(LoginRoute(from: widget.from));
+    if (!mounted) {
+      return;
+    }
+    await context.read<PluginSettingsCubit>().load(widget.from);
+  }
+
+  Future<void> _openDetailPage() async {
+    await context.pushRoute(
+      PluginDetailRoute(
+        from: widget.from,
+        pluginUuid: widget.pluginUuid,
+        pluginDisplayName: widget.pluginDisplayName,
       ),
     );
   }
@@ -504,7 +526,10 @@ class _PluginSettingsPageViewState extends State<_PluginSettingsPageView> {
       }
       showSuccessToast(updated ? t.plugin.syncSuccess : t.plugin.alreadyLatest);
     } catch (e) {
-      showErrorToast(t.plugin.syncFailed(error: e.toString()));
+      logger.e(e);
+      showErrorToast(
+        t.plugin.syncFailed(error: normalizePluginInstallErrorMessage(e)),
+      );
     }
   }
 
@@ -567,7 +592,10 @@ class _PluginSettingsPageViewState extends State<_PluginSettingsPageView> {
       }
       showSuccessToast(message.isNotEmpty ? message : t.plugin.updateSuccess);
     } catch (e) {
-      showErrorToast(t.plugin.updateFailed(error: e.toString()));
+      logger.e(e);
+      showErrorToast(
+        t.plugin.updateFailed(error: normalizePluginInstallErrorMessage(e)),
+      );
     }
   }
 
@@ -601,15 +629,7 @@ class _PluginSettingsPageViewState extends State<_PluginSettingsPageView> {
 
   Future<void> _updatePluginFromLocal() async {
     try {
-      final file = await openFile(
-        acceptedTypeGroups: const [
-          XTypeGroup(
-            label: 'plugin script',
-            extensions: ['js', 'cjs', 'br'],
-            uniformTypeIdentifiers: ['public.javascript'],
-          ),
-        ],
-      );
+      final file = await pickPluginScriptFile();
       if (file == null) {
         return;
       }
@@ -626,7 +646,10 @@ class _PluginSettingsPageViewState extends State<_PluginSettingsPageView> {
       }
       showSuccessToast(message.isNotEmpty ? message : t.plugin.updateSuccess);
     } catch (e) {
-      showErrorToast(t.plugin.updateFailed(error: e.toString()));
+      logger.e(e);
+      showErrorToast(
+        t.plugin.updateFailed(error: normalizePluginInstallErrorMessage(e)),
+      );
     }
   }
 
@@ -667,6 +690,7 @@ class _PluginSettingsPageViewState extends State<_PluginSettingsPageView> {
     try {
       await PluginRegistryService.I.deletePlugin(widget.pluginUuid);
     } catch (e) {
+      logger.e(e);
       if (!mounted) {
         return;
       }
@@ -706,6 +730,7 @@ class _PluginSettingsPageViewState extends State<_PluginSettingsPageView> {
         this.context.router.push(LoginRoute(from: widget.from));
       }
     } catch (e) {
+      logger.e(e);
       showErrorToast(t.plugin.executeFailed(error: e.toString()));
     }
   }

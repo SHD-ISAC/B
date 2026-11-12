@@ -5,18 +5,18 @@ use dashmap::DashMap;
 use ferrous_opencc::{OpenCC, config::BuiltinConfig};
 use flutter_rust_bridge::DartFnFuture;
 use rquickjs_playground::{
-    AsyncHostRuntime, AsyncHostRuntimeBuilder, BridgeRuntimeConfig, HttpClientConfig,
-    WebRuntimeOptions, configure_bridge_runtime as configure_bridge_runtime_global,
-    configure_http_client, configure_js_error_stack, configure_log_http_endpoint,
-    current_http_client_config, is_http_requests_blocked as is_http_requests_blocked_global,
-    js_error_stack_enabled, register_bridge_route_async_handler,
-    register_bridge_route_blocking_handler, register_bridge_route_sync_handler,
+    AsyncHostRuntime, AsyncHostRuntimeBuilder, BridgeRuntimeConfig, WebRuntimeOptions,
+    configure_bridge_runtime as configure_bridge_runtime_global, configure_http_client,
+    configure_js_error_stack, configure_log_http_endpoint, current_http_client_config,
+    is_http_requests_blocked as is_http_requests_blocked_global, js_error_stack_enabled,
+    register_bridge_route_async_handler, register_bridge_route_blocking_handler,
+    register_bridge_route_sync_handler,
     set_http_requests_blocked as set_http_requests_blocked_global, wrap_http_client,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex as AsyncMutex, Notify, RwLock, Semaphore};
 use tokio::time;
@@ -88,6 +88,8 @@ const CANCELLED_GROUP_TTL: Duration = Duration::from_secs(120);
 const REGISTERED_DART_CALLBACK_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_IMAGE_CROP_CONCURRENCY: usize = 4;
 
+static OPENCC_CONVERTERS: LazyLock<DashMap<String, OpenCC>> = LazyLock::new(DashMap::new);
+
 static HOST_CACHE_STORE: OnceLock<DashMap<String, HostCacheEntry>> = OnceLock::new();
 static HOST_CACHE_GC_STARTED: OnceLock<()> = OnceLock::new();
 static HOST_CACHE_GC_ENABLED: std::sync::atomic::AtomicBool =
@@ -108,6 +110,11 @@ fn opencc_convert_by_config(text: &str, config_name: &str) -> Result<String> {
         )));
     }
 
+    // 命中缓存：转换器只读多线程共享，DashMap 读不阻塞。
+    if let Some(converter) = OPENCC_CONVERTERS.get(config_name) {
+        return Ok(converter.convert(text));
+    }
+
     let builtin = BuiltinConfig::from_filename(config_name).map_err(|err| {
         anyhow!(rquickjs_playground::tr!(
             "unsupported-opencc-conversion-config",
@@ -123,7 +130,9 @@ fn opencc_convert_by_config(text: &str, config_name: &str) -> Result<String> {
         ))
     })?;
 
-    Ok(converter.convert(text))
+    let output = converter.convert(text);
+    OPENCC_CONVERTERS.insert(config_name.to_owned(), converter);
+    Ok(output)
 }
 
 fn opencc_convert_with_json_arg(arg: &Value) -> Result<String> {
@@ -1091,10 +1100,7 @@ async fn load_bundle_js_from_url(bundle_url: &str) -> Result<String> {
         )));
     }
 
-    // 与全局 TLS 校验开关保持一致，规避 reqwest 0.13 在部分证书场景下的验证失败问题
-    let http_config = current_http_client_config();
     let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(http_config.disable_tls_verify)
         .build()
         .with_context(|| rquickjs_playground::tr!("failed-to-create-bundle-download-client"))?;
     let client = wrap_http_client(client);
@@ -1557,15 +1563,13 @@ pub async fn qjs_cancel_tasks_by_group(
 }
 
 pub fn set_http_proxy(proxy: String) -> Result<()> {
-    configure_http_client(HttpClientConfig {
-        use_http_proxy: true,
-        use_socks5_proxy: false,
-        http_proxy: Some(proxy),
-        socks5_proxy: None,
-        disable_tls_verify: true,
-        allow_private_network: false,
-    })
-    .map_err(|err| anyhow!("设置 http 代理失败: {err}"))
+    let mut config = current_http_client_config();
+    config.use_http_proxy = true;
+    config.use_socks5_proxy = false;
+    config.http_proxy = Some(proxy);
+    config.socks5_proxy = None;
+    config.allow_private_network = false;
+    configure_http_client(config).map_err(|err| anyhow!("设置 http 代理失败: {err}"))
 }
 
 pub fn set_socks5_proxy(proxy: String) -> Result<()> {
@@ -1584,8 +1588,14 @@ pub fn set_socks5_proxy(proxy: String) -> Result<()> {
 }
 
 pub fn set_tls_verify_enabled(enabled: bool) -> Result<()> {
+    if !enabled {
+        return Err(anyhow!(
+            "Hardened build forbids disabling TLS certificate verification"
+        ));
+    }
+
     let mut config = current_http_client_config();
-    config.disable_tls_verify = !enabled;
+    config.disable_tls_verify = false;
     configure_http_client(config).map_err(|err| anyhow!("设置 TLS 校验开关失败: {err}"))
 }
 
@@ -1819,6 +1829,20 @@ mod tests {
         qjs_fetch_image, qjs_task_call,
     };
     use rquickjs_playground::HttpClientConfig;
+
+    #[test]
+    fn opencc_convert_caches_converters_and_rejects_bad_config() {
+        // 非法配置名直接报错，不污染缓存。
+        assert!(super::opencc_convert_by_config("test", "bad-config").is_err());
+        // 同一配置两次调用结果一致；第二次走缓存。
+        let first = super::opencc_convert_by_config("开放中文转换", "tw2sp.json")
+            .expect("convert with tw2sp");
+        assert!(!first.is_empty());
+        let second = super::opencc_convert_by_config("开放中文转换", "tw2sp.json")
+            .expect("convert with tw2sp again");
+        assert_eq!(first, second);
+        assert!(super::OPENCC_CONVERTERS.contains_key("tw2sp.json"));
+    }
 
     #[test]
     fn cancelled_detection_should_not_match_timeout_diagnostics() {

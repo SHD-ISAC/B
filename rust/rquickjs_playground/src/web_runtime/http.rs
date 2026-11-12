@@ -375,7 +375,9 @@ pub fn build_http_client_ex(
     }
 
     if config.disable_tls_verify {
-        builder = builder.danger_accept_invalid_certs(true);
+        return Err(anyhow!(
+            "Hardened build forbids disabling TLS certificate verification"
+        ));
     }
     if let Some(ua) = options.user_agent.as_ref().filter(|s| !s.is_empty()) {
         builder = builder.user_agent(ua);

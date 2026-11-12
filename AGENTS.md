@@ -35,16 +35,16 @@
 
 ### 2.1 Flutter / Dart
 
-- **Flutter 版本**：`3.44.2`（通过 `.fvmrc` 与 `.puro.json` 锁定，建议使用 FVM / Puro）
-- **Dart SDK**：`^3.9.2`
+- **Flutter 版本**：`3.47.6`（通过 `.fvmrc` 与 `.puro.json` 锁定，建议使用 FVM / Puro）
+- **Dart SDK**：`^3.12.0`（见 `pubspec.yaml` 的 `environment`）
 - **应用包名**：`zephyr`
 
 ### 2.2 Rust
 
 - **主库 crate**：`rust/` 下的 `windcore`
 - **Rust edition**：2024
-- **Flutter Rust Bridge**：`2.12.0`（Rust 侧通过 `=2.12.0` 精确锁定）
-- **rquickjs**：`0.11.0`，用于执行 JS 插件
+- **Flutter Rust Bridge**：`2.13.0`（Rust 侧通过 `=2.13.0` 精确锁定）
+- **rquickjs**：`0.12.0`（见 `rust/rquickjs_playground/Cargo.toml`），用于执行 JS 插件；`rquickjs-sys` 额外打了 `fix/android-windows-bindgen` 分支 patch（Windows 交叉编译 Android 时 host 侧 bindgen 误用 NDK libclang，上游 issue `#709`，见 `rust/Cargo.toml` 底部）
 
 ### 2.3 状态管理与路由
 
@@ -63,8 +63,7 @@
 
 ### 2.5 监控与异常上报
 
-- **Sentry**：`sentry_flutter`，崩溃、性能剖析、会话回放
-- 通过 `sentry_dsn` dart-define 在 Release 构建中启用
+- 加固版将异常交给本地日志记录器。用户手动配置的调试日志转发仍可使用。
 
 ---
 
@@ -92,31 +91,23 @@
 │   ├── src/decode/             # 禁漫图片反混淆
 │   ├── src/memory/             # 内存统计
 │   ├── src/qjs/                # QuickJS runtime 管理
-│   ├── build.rs                # 编译时下载内置插件 bundle
+│   ├── build.rs                # 编译时从 CDN 下载内置插件 bundle（Bika/禁漫），失败回退缓存
 │   ├── Cargo.toml
 │   └── rquickjs_playground/    # QuickJS 宿主运行时封装 crate（独立子 crate）
 ├── windows-installer/          # Windows 安装器（SvelteKit + Tauri v2）
-├── script/                     # 构建与代码生成脚本
-│   ├── android_build_utils.py
-│   ├── build_apk.dart
-│   ├── build_linux_flatpak.dart
-│   ├── build_ncnn_android.py
-│   ├── build_ncnn_static_android.py
-│   ├── build_waifu2x_cli_android.py
-│   ├── build_windows.dart
-│   ├── code_generate.dart
-│   ├── download_android_ncnn_deps.dart
-│   └── prepare_android_waifu2x_deps.py
+├── packages/coreml_upscale/    # CoreML 超分 Flutter 插件（iOS/macOS）
+├── script/                       # 按作用分目录：build（平台构建）/ codegen（唯一代码生成入口 §5.1）/ android（waifu2x CLI 依赖链）/ models（超分模型转换）/ lint（静态检查）
 ├── hook/build.dart             # Dart Native Asset 构建钩子
 ├── flatpak/                    # Linux Flatpak 配置
 ├── android/                    # Android 工程
 ├── ios/ / macos/ / linux/ / windows/  # 各平台原生工程
 ├── .github/workflows/          # CI/CD
-├── asset/                      # 字体、图片、内置资源
-│   └── coreml_models/          # iOS/macOS CoreML 超分模型（随包分发）
-├── test/                       # 测试（当前仅有一个注释掉的 widget_test.dart）
-├── integration_test/             # 集成测试（如 Android RealSR / CoreML 超分端到端验证）
-└── plugin-dev-docs/            # 插件开发文档（VitePress 站点）
+├── asset/                      # 字体、图片资源
+├── lib/i18n/                   # slang 国际化（`*.i18n.json` 输入 → `strings*.g.dart` 生成）
+├── lib/config/router/          # auto_route 路由定义与生成文件
+├── test/                       # 单元/widget 测试（`flutter test`）
+├── integration_test/           # 集成测试（Android RealSR / CoreML 超分端到端）
+└── docs/                       # 设计文档（sync_logic、android_realsr_build 等）
 ```
 
 ### 3.1 典型 Feature 目录结构
@@ -139,9 +130,10 @@ page/comic_info/
 
 以下文件由工具生成，**请勿手动修改**：
 
+- **slang**：`lib/i18n/strings*.g.dart`（输入 `lib/i18n/*.i18n.json`，配置 `slang.yaml`）
 - **ObjectBox**：`lib/object_box/model.g.dart`、`lib/object_box/objectbox.g.dart`
 - **flutter_rust_bridge**：`lib/src/rust/frb_generated*.dart`、`rust/src/frb_generated.rs`
-- **auto_route**：`lib/util/router/router.gr.dart`
+- **auto_route**：`lib/config/router/router.gr.dart`
 - **freezed / json_serializable**：各目录下的 `*.freezed.dart`、`*.g.dart`
 
 ---
@@ -150,8 +142,8 @@ page/comic_info/
 
 ### 4.1 必需工具链
 
-- **Flutter SDK**：`3.44.2`（推荐通过 FVM / Puro 安装）
-- **Rust Toolchain**：通过 `rustup` 安装，并添加目标平台 target
+- **Flutter SDK**：`3.47.6`（通过 `.fvmrc` 与 `.puro.json` 锁定，建议使用 FVM / Puro）
+- **Rust Toolchain**：通过 `rustup` 安装，并添加目标平台 target（无 `rust-toolchain.toml`，跟随 stable）
 - **LLVM / Clang**：`rustqjs` 等库需要解析 C 头，Windows 推荐 `choco install llvm`
 - **Java 21**：Android / Windows / Linux 编译必需
 - **Android SDK / NDK**：NDK 版本见 `android/app/build.gradle.kts` 中的 `ndkVersion`
@@ -169,13 +161,10 @@ page/comic_info/
 ### 4.3 依赖初始化
 
 ```bash
-# 根项目 Flutter 依赖
-flutter pub get
-
-# 桥接层依赖（如存在 rust_builder 目录）
-cd rust_builder
 flutter pub get
 ```
+
+> Flutter 工程禁止用裸 `dart run` 执行依赖 SDK 的命令（如 `dart run slang` 会因解析不了 `integration_test` 等 SDK 内建包而失败）；一律走 `flutter` 通道（`flutter pub run …`）或 `dart ./script/*.dart`（脚本内部已自行调用 `flutter`）。Puro 用户见 §4.4。
 
 ### 4.4 Windows 下调试终端调用 Flutter / Dart（建议优先尝试）
 
@@ -190,14 +179,14 @@ puro dart --version
 
 # 示例
 puro flutter pub get
-puro dart ./script/code_generate.dart
+puro dart ./script/codegen/code_generate.dart
 ```
 
 如果当前 Shell 的 `PATH` 中没有 `puro`，可使用其绝对路径（以本机默认安装位置为例）：
 
 ```bash
 /c/Users/windy/.puro/bin/puro flutter pub get
-/c/Users/windy/.puro/bin/puro dart ./script/code_generate.dart
+/c/Users/windy/.puro/bin/puro dart ./script/codegen/code_generate.dart
 ```
 
 > 这并非强制要求。若你的终端/IDE 已能直接调用 `flutter`/`dart`，或 `cmd.exe` / PowerShell 下工作正常，继续使用原有方式即可。只有在直接调用失败时，再切换到 `puro flutter` / `puro dart`。
@@ -206,20 +195,20 @@ puro dart ./script/code_generate.dart
 
 ## 5. 构建与运行
 
-### 5.1 代码生成
+### 5.1 代码生成（唯一入口）
 
-修改涉及 `auto_route`、`freezed`、`json_serializable`、`objectbox`、FRB 的代码后，必须重新生成：
+修改以下任一输入后，**必须**运行统一脚本重新生成，禁止手动逐条执行或只跑其中某一步：
+
+- `lib/i18n/*.i18n.json`（slang）→ `lib/i18n/strings*.g.dart`
+- `@RoutePage()` / `lib/config/router/router.dart`（auto_route）、`freezed` / `json_serializable` 注解类、`lib/object_box/model.dart`（build_runner）→ 各 `*.g.dart` / `*.freezed.dart` / `objectbox.g.dart`
+- `rust/src/api/`、`rust/src/qjs/` 等 FRB 导出（`#[frb]`）→ `lib/src/rust/frb_generated*.dart` + `rust/src/frb_generated.rs`
 
 ```bash
-# 方式 1：使用项目脚本（推荐）
-dart ./script/code_generate.dart
-
-# 方式 2：手动执行
-flutter pub run build_runner build --delete-conflicting-outputs
-flutter_rust_bridge_codegen generate
-dart format ./lib/
-cargo fmt
+dart ./script/codegen/code_generate.dart
 ```
+
+脚本顺序：`flutter pub run slang` → `flutter pub run build_runner build --delete-conflicting-outputs` → 检查/安装 `flutter_rust_bridge_codegen` → `flutter_rust_bridge_codegen generate` → `dart format ./lib/` + `cargo fmt`（含 `rquickjs_playground`）。
+> 注意：slang 必须走 `flutter pub run slang`，裸 `dart run slang` 在 Flutter 工程里解析依赖失败（见 §4.3）。
 
 ### 5.2 本地运行
 
@@ -227,8 +216,6 @@ cargo fmt
 # 调试运行
 flutter run
 
-# 带 Sentry DSN 运行
-flutter run --dart-define=sentry_dsn=YOUR_DSN
 ```
 
 ### 5.3 平台构建
@@ -237,9 +224,10 @@ flutter run --dart-define=sentry_dsn=YOUR_DSN
 
 | 平台 | 构建命令/脚本 | 产物 |
 |------|---------------|------|
-| Android | `dart ./script/build_apk.dart` | `build/app/outputs/flutter-apk/*.apk` |
-| Linux | `dart ./script/build_linux_flatpak.dart` | `breeze.flatpak` |
-| Windows | `dart ./script/build_windows.dart` | `windows-installer.exe` |
+| Android | `dart ./script/build/build_apk.dart` | `build/app/outputs/flutter-apk/*.apk` |
+| Linux（Flatpak） | `dart ./script/build/build_linux_flatpak.dart` | `breeze.flatpak` |
+| Linux（DEB） | `dart ./script/build/build_linux_deb.dart` | `*.deb` |
+| Windows | `dart ./script/build/build_windows.dart` | `windows-installer.exe` |
 | macOS | `flutter build macos --release` + `create-dmg` | `Breeze-macOS.dmg` |
 | iOS | `flutter build ios --release --no-codesign` + 打包 | `Breeze-iOS.ipa` |
 
@@ -247,7 +235,7 @@ flutter run --dart-define=sentry_dsn=YOUR_DSN
 
 iOS 模拟器（`aarch64-apple-ios-sim`）构建时，`rquickjs-sys` 的 bindgen 会把 Rust target triple 直接传给 clang，但 clang 不识别 `-sim` 后缀。`hook/build.dart` 已针对该目标自动注入 `BINDGEN_EXTRA_CLANG_ARGS=--target=aarch64-apple-ios-simulator` 以绕过此问题。
 
-Windows 安装器打包（`script/build_windows.dart`）会下载 7-Zip 的独立控制台版本 `7zr.exe`（约 590 KB）到 `script/bin/`，并用它将 Flutter Release 目录压缩为 `Release.7z`。Rust 安装器侧通过 `sevenz-rust2` crate 解压。该方案避免了 `package:archive` 生成的不规范 tar 头以及 GNU tar 在 Windows 上的 POSIX 兼容层路径问题。
+Windows 安装器打包（`script/build/build_windows.dart`）会下载 7-Zip 的独立控制台版本 `7zr.exe`（约 590 KB）到 `script/build/bin/`，并用它将 Flutter Release 目录压缩为 `Release.7z`。Rust 安装器侧通过 `sevenz-rust2` crate 解压。该方案避免了 `package:archive` 生成的不规范 tar 头以及 GNU tar 在 Windows 上的 POSIX 兼容层路径问题。
 
 RealSR 桌面端模型不再打包进安装包，首次使用需在设置页下载。模型下载后解压到 `getFilePath()/super_resolution/`，由 `RealSrSuperResolution` 自动调用。Linux / macOS 下载完成后会自动执行 `chmod +x` 授权。
 
@@ -255,11 +243,11 @@ Android 端已彻底从 JNI + ncnn 共享库方案切换到 **waifu2x CLI** 方�
 
 相关脚本（默认仅 `arm64-v8a`）：
 
-- 准备 OpenCV / libwebp 依赖：`python script/prepare_android_waifu2x_deps.py`
-- 编译 ncnn 静态库：`python script/build_ncnn_static_android.py`（关闭 OpenMP，启用 Vulkan）
-- 编译 waifu2x CLI：`python script/build_waifu2x_cli_android.py`（输出 `android/app/src/main/jniLibs/arm64-v8a/libwaifu2x_cli.so`；若 `third_party/RealSR-NCNN-Android` 不存在，脚本会自动从上游仓库克隆）
+- 准备 OpenCV / libwebp 依赖：`python script/android/prepare_android_waifu2x_deps.py`
+- 编译 ncnn 静态库：`python script/android/build_ncnn_static_android.py`（关闭 OpenMP，启用 Vulkan）
+- 编译 waifu2x CLI：`python script/android/build_waifu2x_cli_android.py`（输出 `android/app/src/main/jniLibs/arm64-v8a/libwaifu2x_cli.so`；若 `third_party/RealSR-NCNN-Android` 不存在，脚本会自动从上游仓库克隆）
 
-旧版 ncnn 共享库脚本 `script/build_ncnn_android.py` 与 `script/download_android_ncnn_deps.dart` 仍保留，但 CLI 方案已不再需要它们。
+旧版 ncnn 共享库脚本 `script/build_ncnn_android.py` 与 `script/download_android_ncnn_deps.dart` 已删除（CLI 方案不再需要）；`script/models/build_android_ncnn_models.py` 打包 `realsr-android.7z` 用，但其 `model_dirs`（`models-cunet` / `models-upconv_7_photo`，缺 `models-se`）与现 `AndroidNcnnModelConfig` 已脱节，下次打模型包前需先更新。
 
 ### 5.4 调试代理
 
@@ -283,27 +271,25 @@ Android 端已彻底从 JNI + ncnn 共享库方案切换到 **waifu2x CLI** 方�
 
 ### 6.3 命名与组织
 
-- Dart 包名 `zephyr`，导入使用 `package:zephyr/...`。
+- Dart 包名 `zephyr`，导入使用 `package:zephyr/...`；禁止相对导入（`script/lint/check_relative_imports.py` 可检查）。
 - 页面模块使用 barrel 文件统一 `export` 下层子模块。
 - 复杂业务优先使用 `Bloc`，轻量状态使用 `Cubit`。
-- 状态类优先使用 `freezed` 生成不可变数据；旧模块仍有手写 `copyWith` + `equatable`。
+- 状态类一律使用 `freezed` 生成不可变数据（`equatable` 已彻底移除，`lib/` 内零引用）。
 
 ### 6.4 Rust 规范
 
 - Rust 使用 edition 2024，`cargo fmt` 格式化。
-- `rust-toolchain.toml` 指定工具链，请按项目配置使用。
+- 无 `rust-toolchain.toml`，跟随 stable 工具链。
 - FRB 导出函数使用 `#[frb]`、`#[frb(sync)]`、`#[frb(init)]` 等宏标记。
 
 ---
 
 ## 7. 测试策略
 
-> ⚠️ 当前项目**几乎没有自动化测试**。`test/widget_test.dart` 是 Flutter 模板生成的示例，已被完全注释掉。
-
-- 目前没有单元测试、集成测试或 Widget 测试。
-- 修改核心逻辑后，主要依靠**手动在目标平台运行验证**。
-- 如果你新增复杂业务，建议补充测试，但目前没有现成测试基础设施可直接复用。
-- Windows 安装器 Rust crate（`windows-installer/src-tauri`）包含一个 `sevenz_roundtrip_with_long_paths` 单元测试，用于验证长路径 7z 归档能被 `sevenz-rust2` 正确解压；可在该目录运行 `cargo test --lib sevenz_roundtrip_with_long_paths`。
+- **单元/widget 测试**：`test/`（`flutter test`），覆盖下载队列、同步核心、搜索框、漫画跟随/阅读、书架、设置等；`test/test_helper.dart` 为共享 fixture。`test/widget_test.dart` 仅为占位空壳。
+- **集成测试**：`integration_test/`（Android RealSR / CoreML 超分端到端验证）。
+- **安装器单测**：`windows-installer/src-tauri` 的 `sevenz_roundtrip_with_long_paths`（`cargo test --lib sevenz_roundtrip_with_long_paths`），验证长路径 7z 归档解压。
+- 新增复杂业务时沿用 `test/` 现有风格补测试；核心逻辑修改后仍需在目标平台手动运行验证。
 
 ---
 
@@ -311,57 +297,44 @@ Android 端已彻底从 JNI + ncnn 共享库方案切换到 **waifu2x CLI** 方�
 
 ### 8.1 CI/CD 工作流
 
-- **`.github/workflows/push-build.yml`**：每次 `push` 到 `main` 触发，并行构建 Android / Linux / Windows / macOS / iOS 产物为 artifact，**不发布 Release**。Android 构建前会安装 CMake 3.22.1，运行 `script/prepare_android_waifu2x_deps.py` 准备 OpenCV / libwebp 依赖，再依次运行 `script/build_ncnn_static_android.py` 与 `script/build_waifu2x_cli_android.py` 生成 `libwaifu2x_cli.so`；NCNN 模型不再随包打包，改为首次运行时下载。
-- **`.github/workflows/release.yml`**：手动触发，输入版本号后构建全平台产物，上传符号表到 Sentry，创建 GitHub Release，更新 Homebrew Cask，并发送 Telegram 通知。Android 构建前同样会准备 waifu2x CLI 依赖并编译 CLI。
-- **`.github/workflows/release_to_telegram.yml`**：Release `published` 时触发，向 Telegram 发送版本消息与附件。
-- **`.github/workflows/signpath-smoke.yml`**：签名通道冒烟测试，与正式构建解耦。
+- `.github/workflows/hardened_desktop.yml` 在推送到 `hardened-*` 分支时或手动触发后并行构建 Linux x64 `.deb` 与 macOS arm64 `.dmg`。
+- Flutter SDK 下载包和内置插件均校验 SHA-256。所有 Action 使用完整提交 SHA。产物校验与下载方法见 [桌面构建说明](docs/hardened-build.md)。
 
 ### 8.2 发布前准备
 
-1. 更新 `pubspec.yaml` 中的 `version`。
-2. 在 `CHANGELOG.md` 顶部按格式追加新版本日志（格式：`## [vX.Y.Z]`）。
-3. 提交并推送后手动触发 `release.yml`。
+从上游正式版标签移植加固改动，在相应的 `hardened-*` 分支验证 Linux 和 macOS 构建。
 
 ### 8.3 敏感文件
 
 - `android/key.properties` 与 `android/Breeze-key.keystore` 使用 **git-crypt** 加密。
-- CI 中通过 `secrets.GIT_CRYPT_KEY` 解密。
 - 未解密前请勿修改这些文件，避免破坏加密状态。
-
-### 8.4 Sentry 配置
-
-- Release 构建通过 `--dart-define=sentry_dsn=...` 注入 DSN。
-- 上传符号表需要 `SENTRY_AUTH_TOKEN`、`SENTRY_ORG`、`SENTRY_PROJECT` 环境变量。
-- `pubspec.yaml` 中已配置 `sentry:` 段落。
 
 ---
 
 ## 9. 安全与合规注意事项
 
-- **TLS 校验**：应用在初始化时调用 `setTlsVerifyEnabled(enabled: false)`，默认关闭 TLS 证书校验。这是为兼容部分自签名证书图源，但会降低网络安全性；修改前请充分评估影响。
+- **TLS 校验**在 QuickJS 和 Rust HTTP 客户端中始终开启，macOS 使用系统默认的 App Transport Security 策略。
 - **代理配置**：支持 HTTP / SOCKS5 代理，开发时通过 `.env.proxy` 配置，生产环境由用户在设置中配置。
-- **插件系统**：插件运行在 QuickJS 沙箱中，但可执行网络请求与文件系统操作（取决于 feature）。新增宿主 API 时应注意权限边界。
+- **插件系统**使用 QuickJS。图源运行时不注入文件系统桥，内网访问默认关闭，插件更新由用户手动发起。
 - **第三方内容**：应用不直接托管漫画内容，内容由第三方插件提供。开发与发布时需遵守所在地区法律法规。
-- **崩溃监控**：Release 构建启用 Sentry，会上报异常、性能样本与部分会话回放。注意保护用户隐私。
-- **未签名桌面/macOS/iOS 包**：正式分发的包未进行 Apple / Windows 付费签名，首次安装可能需要用户手动放行。
+- **macOS 签名**使用临时签名（ad hoc），首次安装可能需要通过系统设置允许打开。GitHub Actions 提供构建来源证明。
 
 ---
 
 ## 10. 常见修改入口
 
-| 你想做什么 | 从哪里开始 |
-|-----------|-----------|
-| 新增页面 / 路由 | `lib/page/`、`lib/util/router/router.dart`，然后运行代码生成 |
+| 新增页面 / 路由 | `lib/page/`、`lib/config/router/router.dart`，然后运行 `dart ./script/codegen/code_generate.dart`（§5.1） |
 | 新增数据源/插件支持 | `lib/network/http/plugin/unified_comic_plugin.dart`、`rust/src/api/qjs.rs` |
-| 修改数据库模型 | `lib/object_box/model.dart`，然后运行代码生成 |
+| 修改数据库模型 | `lib/object_box/model.dart`，然后运行 `dart ./script/codegen/code_generate.dart`（§5.1） |
 | 修改全局设置 | `lib/config/global/global_setting.dart` |
-| 修改图片/下载逻辑 | `lib/util/download/`、`lib/network/http/picture/` |
-| 修改 Rust 侧能力 | `rust/src/api/`、`rust/src/qjs/`，然后运行 FRB 生成 |
+| 修改图片/下载逻辑 | `lib/service/download/`、`lib/network/http/picture/` |
+| 修改 Rust 侧能力 | `rust/src/api/`、`rust/src/qjs/`，然后运行 `dart ./script/codegen/code_generate.dart`（§5.1） |
+| 修改国际化文案 | `lib/i18n/*.i18n.json`，然后运行 `dart ./script/codegen/code_generate.dart`（§5.1） |
 | 修改 Windows 安装器 | `windows-installer/src/`、`windows-installer/src-tauri/` |
-| 修改 RealSR 超分逻辑 | `lib/util/real_sr/real_sr_super_resolution.dart`、`lib/page/setting/real_sr/real_sr_setting_page.dart`、`rust/src/api/simple.dart` |
-| 修改 Android RealSR 原生依赖 / waifu2x CLI | `script/prepare_android_waifu2x_deps.py`、`script/build_ncnn_static_android.py`、`script/build_waifu2x_cli_android.py`、`android/app/src/main/cpp/waifu2x_cli/`、`lib/util/real_sr/real_sr_super_resolution.dart` |
-| 修改桌面端 RealSR 策略/模型选择 | `lib/util/real_sr/desktop_ncnn_model_config.dart`、`lib/util/real_sr/real_sr_super_resolution.dart`、`lib/page/setting/real_sr/real_sr_setting_page.dart` |
-| 修改 CoreML 超分（iOS/macOS） | `packages/coreml_upscale/`、`lib/debug/coreml_upscale_debug_page.dart`、`asset/coreml_models/`、`script/convert_realcugan_coreml.py` |
+| 修改 RealSR 超分逻辑 | `lib/page/setting/real_sr/service/real_sr_super_resolution.dart`、`lib/page/setting/real_sr/real_sr_setting_page.dart`、`rust/src/api/simple.rs` |
+| 修改 Android RealSR 原生依赖 / waifu2x CLI | `script/android/prepare_android_waifu2x_deps.py`、`script/android/build_ncnn_static_android.py`、`script/android/build_waifu2x_cli_android.py`、`android/app/src/main/cpp/waifu2x_cli/`、`lib/page/setting/real_sr/service/real_sr_super_resolution.dart` |
+| 修改桌面端 RealSR 策略/模型选择 | `lib/page/setting/real_sr/service/desktop_ncnn_model_config.dart`、`lib/page/setting/real_sr/service/real_sr_super_resolution.dart`、`lib/page/setting/real_sr/real_sr_setting_page.dart` |
+| 修改 CoreML 超分（iOS/macOS） | `packages/coreml_upscale/`、`lib/debug/coreml_upscale_debug_page.dart`、`script/models/convert_realcugan_coreml.py` |
 | 导入/导出应用数据 | `lib/page/setting/data_backup/`、`rust/src/api/data_backup.rs` |
 | 修改 CI/CD | `.github/workflows/`、`script/` |
 
@@ -371,6 +344,5 @@ Android 端已彻底从 JNI + ncnn 共享库方案切换到 **waifu2x CLI** 方�
 
 - **README.md**：用户安装指南与免责声明。
 - **CHANGELOG.md**：版本发布日志。
-- **plugin-dev-docs/**：插件开发文档（VitePress 站点），对外发布地址：<https://deretame.github.io/plugin-dev-docs/>
 - **Android RealSR 构建文档**：`docs/android_realsr_build.md`
 - **Flutter Rust Bridge 文档**：<https://cjycode.com/flutter_rust_bridge/>

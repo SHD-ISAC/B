@@ -11,30 +11,11 @@ import 'package:zephyr/page/comic_info/cubit/episode_download_status_cubit.dart'
 import 'package:zephyr/page/comic_info/cubit/episode_selection_cubit.dart';
 import 'package:zephyr/page/comic_info/widgets/episode_download_controller.dart';
 import 'package:zephyr/service/download/download_task_repository.dart';
-import 'package:zephyr/config/global/global_setting.dart';
 import 'package:zephyr/type/enum.dart';
 import 'package:zephyr/util/context/context_extensions.dart';
 import 'package:zephyr/util/text/chinese_convert.dart';
 import 'package:zephyr/i18n/strings.g.dart';
-
 import 'package:zephyr/config/router/router.gr.dart';
-
-/// 繁简转换缓存：convertChineseForDisplay 底层走 Rust FFI（opencc），
-/// 每行每次 build 都调一次太贵。这里按「模式|原文」缓存，切换设置后自然 miss。
-final Map<String, String> _displayTitleCache = {};
-
-String _cachedConvertForDisplay(String text) {
-  if (text.isEmpty) return text;
-  final mode = globalSetting.chineseConvertMode;
-  if (mode == ChineseConvertMode.off) return text;
-  final key = '${mode.name}|$text';
-  final cached = _displayTitleCache[key];
-  if (cached != null) return cached;
-  final converted = convertChineseForDisplay(text);
-  if (_displayTitleCache.length > 2000) _displayTitleCache.clear();
-  _displayTitleCache[key] = converted;
-  return converted;
-}
 
 class EpButtonWidget extends StatelessWidget {
   static const double fixedHeight = 56;
@@ -44,6 +25,10 @@ class EpButtonWidget extends StatelessWidget {
   final EpisodeDownloadController controller;
   final dynamic allInfo;
   final int epsLength;
+
+  /// 组内总数：分组显示时行号按组内 1..N 编排（null 时回退 [epsLength]，
+  /// 即今天的扁平行为）。阅读器用的总章节数仍走 [epsLength]。
+  final int? displayTotal;
   final ComicEntryType type;
   final String comicId;
   final String from;
@@ -64,6 +49,7 @@ class EpButtonWidget extends StatelessWidget {
     required this.controller,
     required this.allInfo,
     required this.epsLength,
+    this.displayTotal,
     required this.type,
     required this.comicId,
     required this.from,
@@ -79,14 +65,14 @@ class EpButtonWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 不依赖插件返回的 order，按当前显示位置自主计算序号：
-    // 正序从上到下 1..N，倒序从下到上 N..1。
+    // 正序从上到下 1..N，倒序从下到上 N..1。分组时 N 为组内总数。
     // 标题只在外层 build 算一次（带 FFI 缓存），选中/进度变化只走内层监听，
-    // 不会重复触发转换。
-    final displayNumber = isReversed ? epsLength - index : index + 1;
+    final numberTotal = displayTotal ?? epsLength;
+    final displayNumber = isReversed ? numberTotal - index : index + 1;
     final rawTitle = doc.name.trim();
     final title = rawTitle.isEmpty
         ? t.comicInfo.episodeFallback(index: displayNumber)
-        : _cachedConvertForDisplay(rawTitle);
+        : convertChineseForDisplay(rawTitle);
     final episodeLabel = t.comicInfo.episodeLabel(index: displayNumber);
 
     // RepaintBoundary 把进度圈动画隔离在行内；选中态只听 selectionCubit，

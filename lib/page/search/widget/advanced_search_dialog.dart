@@ -43,10 +43,6 @@ class _AdvancedSearchDialogState extends State<AdvancedSearchDialog> {
             _buildSectionTitle(t.search.dataSource),
             _buildSourceRow(),
           ],
-
-          const SizedBox(height: 16),
-          _buildSectionTitle(t.search.sortBy),
-          _buildSortRow(),
         ],
       ),
       actions: [
@@ -76,9 +72,9 @@ class _AdvancedSearchDialogState extends State<AdvancedSearchDialog> {
   }
 
   Widget _buildSourceRow() {
-    final pluginStates = context.watch<PluginRegistryCubit>().state;
+    final registry = context.watch<PluginRegistryCubit>().state;
     final sources = PluginRegistryService.I.sortPlugins(
-      pluginStates.values.where(
+      registry.plugins.values.where(
         (plugin) => plugin.isEnabled && !plugin.isDeleted,
       ),
     );
@@ -86,46 +82,14 @@ class _AdvancedSearchDialogState extends State<AdvancedSearchDialog> {
     return Wrap(
       spacing: 8,
       children: sources.map((plugin) {
-        final info = PluginRegistryService.I.getCachedPluginInfo(plugin.uuid);
-        final name = info?['name']?.toString().trim();
+        final name = registry.pluginName(plugin.uuid);
         return ChoiceChip(
-          label: Text(
-            (name?.isNotEmpty == true ? name! : plugin.uuid).let(
-              convertChineseForDisplay,
-            ),
-          ),
+          label: Text(name.let(convertChineseForDisplay)),
           selected: _tempState.from == plugin.uuid,
           onSelected: (selected) {
             if (selected) {
               setState(() {
                 _tempState = _tempState.copyWith(from: plugin.uuid);
-              });
-            }
-          },
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildSortRow() {
-    final Map<int, String> sortOptions = {
-      1: t.search.newestToOldest,
-      2: t.search.oldestToNewest,
-      3: t.search.mostLikes,
-      4: t.search.mostViews,
-    };
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: sortOptions.entries.map((entry) {
-        return ChoiceChip(
-          label: Text(entry.value.let(convertChineseForDisplay)),
-          selected: _tempState.sortBy == entry.key,
-          onSelected: (selected) {
-            if (selected) {
-              setState(() {
-                _tempState = _tempState.copyWith(sortBy: entry.key);
               });
             }
           },

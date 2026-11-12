@@ -62,9 +62,10 @@ class AppRouter extends RootStackRouter {
     AutoRoute(page: DownloadTaskRoute.page),
     AutoRoute(page: PluginStoreRoute.page),
     AutoRoute(page: PluginSettingsRoute.page),
+    AutoRoute(page: PluginDetailRoute.page),
     AutoRoute(page: PluginFunctionRoute.page),
-    AutoRoute(page: OldHomeRoute.page),
-    AutoRoute(page: OldRankingRoute.page),
+    AutoRoute(page: PluginHomeRoute.page),
+    AutoRoute(page: PluginCloudFavoriteRoute.page),
     AutoRoute(page: MoreRoute.page),
     AutoRoute(page: QjsRuntimeDebugRoute.page),
     AutoRoute(page: CacheSettingRoute.page),
@@ -72,6 +73,7 @@ class AppRouter extends RootStackRouter {
     AutoRoute(page: BookshelfSettingRoute.page),
     AutoRoute(page: DataBackupRoute.page),
     AutoRoute(page: ComicFollowRoute.page),
+    AutoRoute(page: SearchBookmarkRoute.page),
   ];
 
   @override

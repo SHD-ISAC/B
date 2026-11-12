@@ -12,9 +12,8 @@ extension _ComicReadSystemUiPart on _ComicReadPageState {
 
   void _syncVolumeInterception() {
     if (!_isAndroid) return;
-    final globalSettingState = context.read<GlobalSettingCubit>().state;
     final isMenuVisible = context.read<ReaderCubit>().state.isMenuVisible;
-    _volumeController.sync(globalSettingState.readSetting, isMenuVisible);
+    _volumeController.sync(context.readEffectiveReadSetting(), isMenuVisible);
   }
 
   void _syncSystemUi({bool force = false}) {
@@ -26,6 +25,12 @@ extension _ComicReadSystemUiPart on _ComicReadPageState {
     bool isMenuVisible, {
     bool force = false,
   }) async {
-    await _systemUiController.applyVisibility(isMenuVisible, force: force);
+    final keepStatusBar =
+        context.readEffectiveReadSetting().showStatusBar && !_isDesktopPlatform;
+    await _systemUiController.applyVisibility(
+      isMenuVisible,
+      force: force,
+      keepStatusBar: keepStatusBar,
+    );
   }
 }

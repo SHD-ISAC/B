@@ -379,7 +379,7 @@ $ComicInfoCopyWith<$Res> get comicInfo {
 /// @nodoc
 mixin _$ComicInfoActionItem {
 
-@JsonKey(name: 'name') String get name;@JsonKey(name: 'onTap') Map<String, dynamic> get onTap;@JsonKey(name: 'extern') Map<String, dynamic> get extern;
+@JsonKey(name: 'name') String get name;@JsonKey(name: 'onTap') Map<String, dynamic> get onTap;@JsonKey(name: 'onLongPress') String? get onLongPress;@JsonKey(name: 'extern') Map<String, dynamic> get extern;
 /// Create a copy of ComicInfoActionItem
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -393,20 +393,20 @@ $ComicInfoActionItemCopyWith<ComicInfoActionItem> get copyWith => _$ComicInfoAct
 @override
 bool operator ==(Object other) {
   final _this = this as ComicInfoActionItem;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ComicInfoActionItem&&(identical(other.name, _this.name) || other.name == _this.name)&&const DeepCollectionEquality().equals(other.onTap, _this.onTap)&&const DeepCollectionEquality().equals(other.extern, _this.extern));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ComicInfoActionItem&&(identical(other.name, _this.name) || other.name == _this.name)&&const DeepCollectionEquality().equals(other.onTap, _this.onTap)&&(identical(other.onLongPress, _this.onLongPress) || other.onLongPress == _this.onLongPress)&&const DeepCollectionEquality().equals(other.extern, _this.extern));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as ComicInfoActionItem;
-  return Object.hash(runtimeType,_this.name,const DeepCollectionEquality().hash(_this.onTap),const DeepCollectionEquality().hash(_this.extern));
+  return Object.hash(runtimeType,_this.name,const DeepCollectionEquality().hash(_this.onTap),_this.onLongPress,const DeepCollectionEquality().hash(_this.extern));
 }
 
 @override
 String toString() {
   final _this = this as ComicInfoActionItem;
-  return 'ComicInfoActionItem(name: ${_this.name}, onTap: ${_this.onTap}, extern: ${_this.extern})';
+  return 'ComicInfoActionItem(name: ${_this.name}, onTap: ${_this.onTap}, onLongPress: ${_this.onLongPress}, extern: ${_this.extern})';
 }
 
 
@@ -417,7 +417,7 @@ abstract mixin class $ComicInfoActionItemCopyWith<$Res>  {
   factory $ComicInfoActionItemCopyWith(ComicInfoActionItem value, $Res Function(ComicInfoActionItem) _then) = _$ComicInfoActionItemCopyWithImpl;
 @useResult
 $Res call({
-@JsonKey(name: 'name') String name,@JsonKey(name: 'onTap') Map<String, dynamic> onTap,@JsonKey(name: 'extern') Map<String, dynamic> extern
+@JsonKey(name: 'name') String name,@JsonKey(name: 'onTap') Map<String, dynamic> onTap,@JsonKey(name: 'onLongPress') String? onLongPress,@JsonKey(name: 'extern') Map<String, dynamic> extern
 });
 
 
@@ -434,11 +434,12 @@ class _$ComicInfoActionItemCopyWithImpl<$Res>
 
 /// Create a copy of ComicInfoActionItem
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? name = null,Object? onTap = null,Object? extern = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? name = null,Object? onTap = null,Object? onLongPress = freezed,Object? extern = null,}) {
   return _then(ComicInfoActionItem(
 name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,onTap: null == onTap ? _self.onTap : onTap // ignore: cast_nullable_to_non_nullable
-as Map<String, dynamic>,extern: null == extern ? _self.extern : extern // ignore: cast_nullable_to_non_nullable
+as Map<String, dynamic>,onLongPress: freezed == onLongPress ? _self.onLongPress : onLongPress // ignore: cast_nullable_to_non_nullable
+as String?,extern: null == extern ? _self.extern : extern // ignore: cast_nullable_to_non_nullable
 as Map<String, dynamic>,
   ));
 }
@@ -524,10 +525,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: 'name')  String name, @JsonKey(name: 'onTap')  Map<String, dynamic> onTap, @JsonKey(name: 'extern')  Map<String, dynamic> extern)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: 'name')  String name, @JsonKey(name: 'onTap')  Map<String, dynamic> onTap, @JsonKey(name: 'onLongPress')  String? onLongPress, @JsonKey(name: 'extern')  Map<String, dynamic> extern)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ComicInfoActionItem() when $default != null:
-return $default(_that.name,_that.onTap,_that.extern);case _:
+return $default(_that.name,_that.onTap,_that.onLongPress,_that.extern);case _:
   return orElse();
 
 }
@@ -545,10 +546,10 @@ return $default(_that.name,_that.onTap,_that.extern);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: 'name')  String name, @JsonKey(name: 'onTap')  Map<String, dynamic> onTap, @JsonKey(name: 'extern')  Map<String, dynamic> extern)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: 'name')  String name, @JsonKey(name: 'onTap')  Map<String, dynamic> onTap, @JsonKey(name: 'onLongPress')  String? onLongPress, @JsonKey(name: 'extern')  Map<String, dynamic> extern)  $default,) {final _that = this;
 switch (_that) {
 case _ComicInfoActionItem():
-return $default(_that.name,_that.onTap,_that.extern);case _:
+return $default(_that.name,_that.onTap,_that.onLongPress,_that.extern);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -565,10 +566,10 @@ return $default(_that.name,_that.onTap,_that.extern);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: 'name')  String name, @JsonKey(name: 'onTap')  Map<String, dynamic> onTap, @JsonKey(name: 'extern')  Map<String, dynamic> extern)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: 'name')  String name, @JsonKey(name: 'onTap')  Map<String, dynamic> onTap, @JsonKey(name: 'onLongPress')  String? onLongPress, @JsonKey(name: 'extern')  Map<String, dynamic> extern)?  $default,) {final _that = this;
 switch (_that) {
 case _ComicInfoActionItem() when $default != null:
-return $default(_that.name,_that.onTap,_that.extern);case _:
+return $default(_that.name,_that.onTap,_that.onLongPress,_that.extern);case _:
   return null;
 
 }
@@ -580,7 +581,7 @@ return $default(_that.name,_that.onTap,_that.extern);case _:
 @JsonSerializable()
 
 class _ComicInfoActionItem implements ComicInfoActionItem {
-  const _ComicInfoActionItem({@JsonKey(name: 'name') required this.name, @JsonKey(name: 'onTap')  Map<String, dynamic> onTap = const {}, @JsonKey(name: 'extern')  Map<String, dynamic> extern = const {}}): _onTap = onTap,_extern = extern;
+  const _ComicInfoActionItem({@JsonKey(name: 'name') required this.name, @JsonKey(name: 'onTap')  Map<String, dynamic> onTap = const {}, @JsonKey(name: 'onLongPress') this.onLongPress, @JsonKey(name: 'extern')  Map<String, dynamic> extern = const {}}): _onTap = onTap,_extern = extern;
   factory _ComicInfoActionItem.fromJson(Map<String, dynamic> json) => _$ComicInfoActionItemFromJson(json);
 
 @override@JsonKey(name: 'name') final  String name;
@@ -591,6 +592,7 @@ class _ComicInfoActionItem implements ComicInfoActionItem {
   return EqualUnmodifiableMapView(_onTap);
 }
 
+@override@JsonKey(name: 'onLongPress') final  String? onLongPress;
  final  Map<String, dynamic> _extern;
 @override@JsonKey(name: 'extern') Map<String, dynamic> get extern {
   if (_extern is EqualUnmodifiableMapView) return _extern;
@@ -612,18 +614,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _ComicInfoActionItem&&(identical(other.name, name) || other.name == name)&&const DeepCollectionEquality().equals(other.onTap, _onTap)&&const DeepCollectionEquality().equals(other.extern, _extern));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _ComicInfoActionItem&&(identical(other.name, name) || other.name == name)&&const DeepCollectionEquality().equals(other.onTap, _onTap)&&(identical(other.onLongPress, onLongPress) || other.onLongPress == onLongPress)&&const DeepCollectionEquality().equals(other.extern, _extern));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,name,const DeepCollectionEquality().hash(_onTap),const DeepCollectionEquality().hash(_extern));
+    return Object.hash(runtimeType,name,const DeepCollectionEquality().hash(_onTap),onLongPress,const DeepCollectionEquality().hash(_extern));
 }
 
 @override
 String toString() {
-    return 'ComicInfoActionItem(name: $name, onTap: $onTap, extern: $extern)';
+    return 'ComicInfoActionItem(name: $name, onTap: $onTap, onLongPress: $onLongPress, extern: $extern)';
 }
 
 
@@ -634,7 +636,7 @@ abstract mixin class _$ComicInfoActionItemCopyWith<$Res> implements $ComicInfoAc
   factory _$ComicInfoActionItemCopyWith(_ComicInfoActionItem value, $Res Function(_ComicInfoActionItem) _then) = __$ComicInfoActionItemCopyWithImpl;
 @override @useResult
 $Res call({
-@JsonKey(name: 'name') String name,@JsonKey(name: 'onTap') Map<String, dynamic> onTap,@JsonKey(name: 'extern') Map<String, dynamic> extern
+@JsonKey(name: 'name') String name,@JsonKey(name: 'onTap') Map<String, dynamic> onTap,@JsonKey(name: 'onLongPress') String? onLongPress,@JsonKey(name: 'extern') Map<String, dynamic> extern
 });
 
 
@@ -651,11 +653,12 @@ class __$ComicInfoActionItemCopyWithImpl<$Res>
 
 /// Create a copy of ComicInfoActionItem
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? name = null,Object? onTap = null,Object? extern = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? name = null,Object? onTap = null,Object? onLongPress = freezed,Object? extern = null,}) {
   return _then(_ComicInfoActionItem(
 name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,onTap: null == onTap ? _self._onTap : onTap // ignore: cast_nullable_to_non_nullable
-as Map<String, dynamic>,extern: null == extern ? _self._extern : extern // ignore: cast_nullable_to_non_nullable
+as Map<String, dynamic>,onLongPress: freezed == onLongPress ? _self.onLongPress : onLongPress // ignore: cast_nullable_to_non_nullable
+as String?,extern: null == extern ? _self._extern : extern // ignore: cast_nullable_to_non_nullable
 as Map<String, dynamic>,
   ));
 }
@@ -1773,7 +1776,7 @@ return $default(_that.id,_that.title,_that.titleMeta,_that.creator,_that.descrip
 @JsonSerializable()
 
 class _ComicInfo implements ComicInfo {
-  const _ComicInfo({@JsonKey(name: 'id') required this.id, @JsonKey(name: 'title') required this.title, @JsonKey(name: 'titleMeta') required  List<ComicInfoActionItem> titleMeta, @JsonKey(name: 'creator') required this.creator, @JsonKey(name: 'description') required this.description, @JsonKey(name: 'cover') required this.cover, @JsonKey(name: 'metadata') required  List<ComicInfoMetadata> metadata, @JsonKey(name: 'extern')  Map<String, dynamic> extern = const {}}): _titleMeta = titleMeta,_metadata = metadata,_extern = extern;
+  const _ComicInfo({@JsonKey(name: 'id') required this.id, @JsonKey(name: 'title') required this.title, @JsonKey(name: 'titleMeta') required  List<ComicInfoActionItem> titleMeta, @JsonKey(name: 'creator') this.creator = const Creator(id: '', name: '', avatar: ComicImage(id: '', url: '', name: '')), @JsonKey(name: 'description') required this.description, @JsonKey(name: 'cover') required this.cover, @JsonKey(name: 'metadata') required  List<ComicInfoMetadata> metadata, @JsonKey(name: 'extern')  Map<String, dynamic> extern = const {}}): _titleMeta = titleMeta,_metadata = metadata,_extern = extern;
   factory _ComicInfo.fromJson(Map<String, dynamic> json) => _$ComicInfoFromJson(json);
 
 @override@JsonKey(name: 'id') final  String id;
@@ -1894,7 +1897,7 @@ $ComicImageCopyWith<$Res> get cover {
 /// @nodoc
 mixin _$Ep {
 
-@JsonKey(name: 'id') String get id;@JsonKey(name: 'name') String get name;@JsonKey(name: 'order') int get order;@JsonKey(name: 'requestId') String get requestId;@JsonKey(name: 'storageChapterId') String get storageChapterId;@JsonKey(name: 'logicalKey') String get logicalKey;@JsonKey(name: 'extern') Map<String, dynamic> get extern;
+@JsonKey(name: 'id') String get id;@JsonKey(name: 'name') String get name;@JsonKey(name: 'order') int get order;@JsonKey(name: 'requestId') String get requestId;@JsonKey(name: 'storageChapterId') String get storageChapterId;@JsonKey(name: 'logicalKey') String get logicalKey;@JsonKey(name: 'groupTitle') String get groupTitle;@JsonKey(name: 'extern') Map<String, dynamic> get extern;
 /// Create a copy of Ep
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1908,20 +1911,20 @@ $EpCopyWith<Ep> get copyWith => _$EpCopyWithImpl<Ep>(this as Ep, _$identity);
 @override
 bool operator ==(Object other) {
   final _this = this as Ep;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Ep&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.name, _this.name) || other.name == _this.name)&&(identical(other.order, _this.order) || other.order == _this.order)&&(identical(other.requestId, _this.requestId) || other.requestId == _this.requestId)&&(identical(other.storageChapterId, _this.storageChapterId) || other.storageChapterId == _this.storageChapterId)&&(identical(other.logicalKey, _this.logicalKey) || other.logicalKey == _this.logicalKey)&&const DeepCollectionEquality().equals(other.extern, _this.extern));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Ep&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.name, _this.name) || other.name == _this.name)&&(identical(other.order, _this.order) || other.order == _this.order)&&(identical(other.requestId, _this.requestId) || other.requestId == _this.requestId)&&(identical(other.storageChapterId, _this.storageChapterId) || other.storageChapterId == _this.storageChapterId)&&(identical(other.logicalKey, _this.logicalKey) || other.logicalKey == _this.logicalKey)&&(identical(other.groupTitle, _this.groupTitle) || other.groupTitle == _this.groupTitle)&&const DeepCollectionEquality().equals(other.extern, _this.extern));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as Ep;
-  return Object.hash(runtimeType,_this.id,_this.name,_this.order,_this.requestId,_this.storageChapterId,_this.logicalKey,const DeepCollectionEquality().hash(_this.extern));
+  return Object.hash(runtimeType,_this.id,_this.name,_this.order,_this.requestId,_this.storageChapterId,_this.logicalKey,_this.groupTitle,const DeepCollectionEquality().hash(_this.extern));
 }
 
 @override
 String toString() {
   final _this = this as Ep;
-  return 'Ep(id: ${_this.id}, name: ${_this.name}, order: ${_this.order}, requestId: ${_this.requestId}, storageChapterId: ${_this.storageChapterId}, logicalKey: ${_this.logicalKey}, extern: ${_this.extern})';
+  return 'Ep(id: ${_this.id}, name: ${_this.name}, order: ${_this.order}, requestId: ${_this.requestId}, storageChapterId: ${_this.storageChapterId}, logicalKey: ${_this.logicalKey}, groupTitle: ${_this.groupTitle}, extern: ${_this.extern})';
 }
 
 
@@ -1932,7 +1935,7 @@ abstract mixin class $EpCopyWith<$Res>  {
   factory $EpCopyWith(Ep value, $Res Function(Ep) _then) = _$EpCopyWithImpl;
 @useResult
 $Res call({
-@JsonKey(name: 'id') String id,@JsonKey(name: 'name') String name,@JsonKey(name: 'order') int order,@JsonKey(name: 'requestId') String requestId,@JsonKey(name: 'storageChapterId') String storageChapterId,@JsonKey(name: 'logicalKey') String logicalKey,@JsonKey(name: 'extern') Map<String, dynamic> extern
+@JsonKey(name: 'id') String id,@JsonKey(name: 'name') String name,@JsonKey(name: 'order') int order,@JsonKey(name: 'requestId') String requestId,@JsonKey(name: 'storageChapterId') String storageChapterId,@JsonKey(name: 'logicalKey') String logicalKey,@JsonKey(name: 'groupTitle') String groupTitle,@JsonKey(name: 'extern') Map<String, dynamic> extern
 });
 
 
@@ -1949,7 +1952,7 @@ class _$EpCopyWithImpl<$Res>
 
 /// Create a copy of Ep
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? order = null,Object? requestId = null,Object? storageChapterId = null,Object? logicalKey = null,Object? extern = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? order = null,Object? requestId = null,Object? storageChapterId = null,Object? logicalKey = null,Object? groupTitle = null,Object? extern = null,}) {
   return _then(Ep(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -1957,6 +1960,7 @@ as String,order: null == order ? _self.order : order // ignore: cast_nullable_to
 as int,requestId: null == requestId ? _self.requestId : requestId // ignore: cast_nullable_to_non_nullable
 as String,storageChapterId: null == storageChapterId ? _self.storageChapterId : storageChapterId // ignore: cast_nullable_to_non_nullable
 as String,logicalKey: null == logicalKey ? _self.logicalKey : logicalKey // ignore: cast_nullable_to_non_nullable
+as String,groupTitle: null == groupTitle ? _self.groupTitle : groupTitle // ignore: cast_nullable_to_non_nullable
 as String,extern: null == extern ? _self.extern : extern // ignore: cast_nullable_to_non_nullable
 as Map<String, dynamic>,
   ));
@@ -2043,10 +2047,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: 'id')  String id, @JsonKey(name: 'name')  String name, @JsonKey(name: 'order')  int order, @JsonKey(name: 'requestId')  String requestId, @JsonKey(name: 'storageChapterId')  String storageChapterId, @JsonKey(name: 'logicalKey')  String logicalKey, @JsonKey(name: 'extern')  Map<String, dynamic> extern)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: 'id')  String id, @JsonKey(name: 'name')  String name, @JsonKey(name: 'order')  int order, @JsonKey(name: 'requestId')  String requestId, @JsonKey(name: 'storageChapterId')  String storageChapterId, @JsonKey(name: 'logicalKey')  String logicalKey, @JsonKey(name: 'groupTitle')  String groupTitle, @JsonKey(name: 'extern')  Map<String, dynamic> extern)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Ep() when $default != null:
-return $default(_that.id,_that.name,_that.order,_that.requestId,_that.storageChapterId,_that.logicalKey,_that.extern);case _:
+return $default(_that.id,_that.name,_that.order,_that.requestId,_that.storageChapterId,_that.logicalKey,_that.groupTitle,_that.extern);case _:
   return orElse();
 
 }
@@ -2064,10 +2068,10 @@ return $default(_that.id,_that.name,_that.order,_that.requestId,_that.storageCha
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: 'id')  String id, @JsonKey(name: 'name')  String name, @JsonKey(name: 'order')  int order, @JsonKey(name: 'requestId')  String requestId, @JsonKey(name: 'storageChapterId')  String storageChapterId, @JsonKey(name: 'logicalKey')  String logicalKey, @JsonKey(name: 'extern')  Map<String, dynamic> extern)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: 'id')  String id, @JsonKey(name: 'name')  String name, @JsonKey(name: 'order')  int order, @JsonKey(name: 'requestId')  String requestId, @JsonKey(name: 'storageChapterId')  String storageChapterId, @JsonKey(name: 'logicalKey')  String logicalKey, @JsonKey(name: 'groupTitle')  String groupTitle, @JsonKey(name: 'extern')  Map<String, dynamic> extern)  $default,) {final _that = this;
 switch (_that) {
 case _Ep():
-return $default(_that.id,_that.name,_that.order,_that.requestId,_that.storageChapterId,_that.logicalKey,_that.extern);case _:
+return $default(_that.id,_that.name,_that.order,_that.requestId,_that.storageChapterId,_that.logicalKey,_that.groupTitle,_that.extern);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -2084,10 +2088,10 @@ return $default(_that.id,_that.name,_that.order,_that.requestId,_that.storageCha
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: 'id')  String id, @JsonKey(name: 'name')  String name, @JsonKey(name: 'order')  int order, @JsonKey(name: 'requestId')  String requestId, @JsonKey(name: 'storageChapterId')  String storageChapterId, @JsonKey(name: 'logicalKey')  String logicalKey, @JsonKey(name: 'extern')  Map<String, dynamic> extern)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: 'id')  String id, @JsonKey(name: 'name')  String name, @JsonKey(name: 'order')  int order, @JsonKey(name: 'requestId')  String requestId, @JsonKey(name: 'storageChapterId')  String storageChapterId, @JsonKey(name: 'logicalKey')  String logicalKey, @JsonKey(name: 'groupTitle')  String groupTitle, @JsonKey(name: 'extern')  Map<String, dynamic> extern)?  $default,) {final _that = this;
 switch (_that) {
 case _Ep() when $default != null:
-return $default(_that.id,_that.name,_that.order,_that.requestId,_that.storageChapterId,_that.logicalKey,_that.extern);case _:
+return $default(_that.id,_that.name,_that.order,_that.requestId,_that.storageChapterId,_that.logicalKey,_that.groupTitle,_that.extern);case _:
   return null;
 
 }
@@ -2099,7 +2103,7 @@ return $default(_that.id,_that.name,_that.order,_that.requestId,_that.storageCha
 @JsonSerializable()
 
 class _Ep implements Ep {
-  const _Ep({@JsonKey(name: 'id') this.id = '', @JsonKey(name: 'name') required this.name, @JsonKey(name: 'order') required this.order, @JsonKey(name: 'requestId') this.requestId = '', @JsonKey(name: 'storageChapterId') this.storageChapterId = '', @JsonKey(name: 'logicalKey') this.logicalKey = '', @JsonKey(name: 'extern')  Map<String, dynamic> extern = const {}}): _extern = extern;
+  const _Ep({@JsonKey(name: 'id') this.id = '', @JsonKey(name: 'name') required this.name, @JsonKey(name: 'order') required this.order, @JsonKey(name: 'requestId') this.requestId = '', @JsonKey(name: 'storageChapterId') this.storageChapterId = '', @JsonKey(name: 'logicalKey') this.logicalKey = '', @JsonKey(name: 'groupTitle') this.groupTitle = '', @JsonKey(name: 'extern')  Map<String, dynamic> extern = const {}}): _extern = extern;
   factory _Ep.fromJson(Map<String, dynamic> json) => _$EpFromJson(json);
 
 @override@JsonKey(name: 'id') final  String id;
@@ -2108,6 +2112,7 @@ class _Ep implements Ep {
 @override@JsonKey(name: 'requestId') final  String requestId;
 @override@JsonKey(name: 'storageChapterId') final  String storageChapterId;
 @override@JsonKey(name: 'logicalKey') final  String logicalKey;
+@override@JsonKey(name: 'groupTitle') final  String groupTitle;
  final  Map<String, dynamic> _extern;
 @override@JsonKey(name: 'extern') Map<String, dynamic> get extern {
   if (_extern is EqualUnmodifiableMapView) return _extern;
@@ -2129,18 +2134,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _Ep&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.order, order) || other.order == order)&&(identical(other.requestId, requestId) || other.requestId == requestId)&&(identical(other.storageChapterId, storageChapterId) || other.storageChapterId == storageChapterId)&&(identical(other.logicalKey, logicalKey) || other.logicalKey == logicalKey)&&const DeepCollectionEquality().equals(other.extern, _extern));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _Ep&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.order, order) || other.order == order)&&(identical(other.requestId, requestId) || other.requestId == requestId)&&(identical(other.storageChapterId, storageChapterId) || other.storageChapterId == storageChapterId)&&(identical(other.logicalKey, logicalKey) || other.logicalKey == logicalKey)&&(identical(other.groupTitle, groupTitle) || other.groupTitle == groupTitle)&&const DeepCollectionEquality().equals(other.extern, _extern));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,id,name,order,requestId,storageChapterId,logicalKey,const DeepCollectionEquality().hash(_extern));
+    return Object.hash(runtimeType,id,name,order,requestId,storageChapterId,logicalKey,groupTitle,const DeepCollectionEquality().hash(_extern));
 }
 
 @override
 String toString() {
-    return 'Ep(id: $id, name: $name, order: $order, requestId: $requestId, storageChapterId: $storageChapterId, logicalKey: $logicalKey, extern: $extern)';
+    return 'Ep(id: $id, name: $name, order: $order, requestId: $requestId, storageChapterId: $storageChapterId, logicalKey: $logicalKey, groupTitle: $groupTitle, extern: $extern)';
 }
 
 
@@ -2151,7 +2156,7 @@ abstract mixin class _$EpCopyWith<$Res> implements $EpCopyWith<$Res> {
   factory _$EpCopyWith(_Ep value, $Res Function(_Ep) _then) = __$EpCopyWithImpl;
 @override @useResult
 $Res call({
-@JsonKey(name: 'id') String id,@JsonKey(name: 'name') String name,@JsonKey(name: 'order') int order,@JsonKey(name: 'requestId') String requestId,@JsonKey(name: 'storageChapterId') String storageChapterId,@JsonKey(name: 'logicalKey') String logicalKey,@JsonKey(name: 'extern') Map<String, dynamic> extern
+@JsonKey(name: 'id') String id,@JsonKey(name: 'name') String name,@JsonKey(name: 'order') int order,@JsonKey(name: 'requestId') String requestId,@JsonKey(name: 'storageChapterId') String storageChapterId,@JsonKey(name: 'logicalKey') String logicalKey,@JsonKey(name: 'groupTitle') String groupTitle,@JsonKey(name: 'extern') Map<String, dynamic> extern
 });
 
 
@@ -2168,7 +2173,7 @@ class __$EpCopyWithImpl<$Res>
 
 /// Create a copy of Ep
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? order = null,Object? requestId = null,Object? storageChapterId = null,Object? logicalKey = null,Object? extern = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? order = null,Object? requestId = null,Object? storageChapterId = null,Object? logicalKey = null,Object? groupTitle = null,Object? extern = null,}) {
   return _then(_Ep(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -2176,6 +2181,7 @@ as String,order: null == order ? _self.order : order // ignore: cast_nullable_to
 as int,requestId: null == requestId ? _self.requestId : requestId // ignore: cast_nullable_to_non_nullable
 as String,storageChapterId: null == storageChapterId ? _self.storageChapterId : storageChapterId // ignore: cast_nullable_to_non_nullable
 as String,logicalKey: null == logicalKey ? _self.logicalKey : logicalKey // ignore: cast_nullable_to_non_nullable
+as String,groupTitle: null == groupTitle ? _self.groupTitle : groupTitle // ignore: cast_nullable_to_non_nullable
 as String,extern: null == extern ? _self._extern : extern // ignore: cast_nullable_to_non_nullable
 as Map<String, dynamic>,
   ));

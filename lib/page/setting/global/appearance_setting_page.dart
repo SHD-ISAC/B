@@ -35,8 +35,10 @@ class AppearanceSettingPage extends StatelessWidget {
           if (!state.dynamicColor) changeThemeColor(context),
           _comicReadTopContainer(state, cubit),
           _isAMOLED(state, cubit),
+          _detailLayout(state, cubit),
+          _showPluginHome(state, cubit),
+          _showPluginCloudFavorite(state, cubit),
           _fontSettings(context),
-          const SizedBox(height: 32),
         ],
       ),
     );
@@ -157,6 +159,53 @@ class AppearanceSettingPage extends StatelessWidget {
       onChanged: (bool value) {
         cubit.updateReadSetting(
           (current) => current.copyWith(comicReadTopContainer: value),
+        );
+      },
+    );
+  }
+
+  Widget _detailLayout(GlobalSettingState state, GlobalSettingCubit cubit) {
+    return SwitchListTile(
+      secondary: const Icon(Icons.view_list_outlined),
+      title: Text(t.settings.detailLayout),
+      subtitle: Text(t.settings.detailLayoutSubtitle),
+      thumbIcon: kSettingSwitchThumbIcon,
+      value: state.bookshelfSetting.detailLayout,
+      onChanged: (bool value) {
+        cubit.updateBookshelfSetting(
+          (current) => current.copyWith(detailLayout: value),
+        );
+        showSuccessToast(t.common.settingSaved);
+      },
+    );
+  }
+
+  Widget _showPluginHome(GlobalSettingState state, GlobalSettingCubit cubit) {
+    return SwitchListTile(
+      secondary: const Icon(Icons.home_outlined),
+      title: Text(t.settings.showPluginHome),
+      subtitle: Text(t.settings.showPluginHomeSubtitle),
+      thumbIcon: kSettingSwitchThumbIcon,
+      value: state.showPluginHome,
+      onChanged: (bool value) {
+        cubit.updateState((current) => current.copyWith(showPluginHome: value));
+      },
+    );
+  }
+
+  Widget _showPluginCloudFavorite(
+    GlobalSettingState state,
+    GlobalSettingCubit cubit,
+  ) {
+    return SwitchListTile(
+      secondary: const Icon(Icons.cloud_outlined),
+      title: Text(t.settings.showPluginCloudFavorite),
+      subtitle: Text(t.settings.showPluginCloudFavoriteSubtitle),
+      thumbIcon: kSettingSwitchThumbIcon,
+      value: state.showPluginCloudFavorite,
+      onChanged: (bool value) {
+        cubit.updateState(
+          (current) => current.copyWith(showPluginCloudFavorite: value),
         );
       },
     );

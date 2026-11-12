@@ -1,0 +1,193 @@
+name: Hardened Desktop Build
+
+on:
+  push:
+    branches:
+      - 'hardened-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  FLUTTER_VERSION: '3.47.8'
+  FLUTTER_SUPPRESS_ANALYTICS: 'true'
+  COCOAPODS_DISABLE_STATS: 'true'
+  RUSTUP_TOOLCHAIN: '1.98.1'
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux x64
+            runner: ubuntu-24.04
+            rust-target: x86_64-unknown-linux-gnu
+            flutter-archive: stable/linux/flutter_linux_3.47.8-stable.tar.xz
+            flutter-sha256: baf7dcc5a3dbba60fe863bf493a6cf203195621f7786eaa5a1bba02cd0d87dd2
+            artifact: Breeze-Hardened-Linux-x64
+            output-dir: build-deb
+            package-glob: breeze_*.deb
+          - platform: macOS arm64
+            runner: macos-26
+            rust-target: aarch64-apple-darwin
+            flutter-archive: stable/macos/flutter_macos_arm64_3.47.8-stable.zip
+            flutter-sha256: 6114edc2dae3636cfefb7e4456a4510399ee856e324149b34dbacb509e329d05
+            artifact: Breeze-Hardened-macOS-arm64
+            output-dir: build-dmg
+            package-glob: Breeze-Hardened-macOS-*-arm64.dmg
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Verify hardened source policy
+        run: bash script/lint/verify_hardened_source.sh
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            cmake \
+            dpkg-dev \
+            libayatana-appindicator3-dev \
+            libclang-dev \
+            libcurl4-openssl-dev \
+            libgcrypt20-dev \
+            libgtk-3-dev \
+            liblzma-dev \
+            libwebkit2gtk-4.1-dev \
+            llvm-dev \
+            ninja-build \
+            pkg-config
+
+      - name: Select Xcode
+        if: runner.os == 'macOS'
+        run: |
+          test "$(uname -m)" = arm64
+          developer_dir=/Applications/Xcode_26.6.app/Contents/Developer
+          test -d "$developer_dir"
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$developer_dir" xcodebuild -version
+
+      - name: Install verified Flutter SDK
+        env:
+          FLUTTER_ARCHIVE: ${{ matrix.flutter-archive }}
+          FLUTTER_SHA256: ${{ matrix.flutter-sha256 }}
+        run: |
+          test "$(jq -er '.flutter' .fvmrc)" = "$FLUTTER_VERSION"
+          sdk_dir="$RUNNER_TEMP/flutter-sdk"
+          archive="$sdk_dir/$(basename "$FLUTTER_ARCHIVE")"
+          mkdir -p "$sdk_dir"
+          curl --proto '=https' --proto-redir '=https' --fail --silent --show-error \
+            --location --retry 3 --output "$archive" \
+            "https://storage.googleapis.com/flutter_infra_release/releases/$FLUTTER_ARCHIVE"
+          printf '%s  %s\n' "$FLUTTER_SHA256" "$archive" | shasum -a 256 -c -
+          case "$archive" in
+            *.tar.xz) tar -xJf "$archive" -C "$sdk_dir" ;;
+            *.zip) ditto -x -k "$archive" "$sdk_dir" ;;
+          esac
+          rm "$archive"
+          "$sdk_dir/flutter/bin/flutter" --version
+          echo "$sdk_dir/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+          targets: ${{ matrix.rust-target }}
+
+      - name: Resolve locked Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Build hardened Linux deb
+        if: runner.os == 'Linux'
+        run: dart script/build/build_linux_deb.dart
+
+      - name: Build hardened macOS app
+        if: runner.os == 'macOS'
+        run: |
+          flutter config --enable-macos-arm64-only
+          flutter build macos --release --no-pub
+
+      - name: Package and verify macOS DMG
+        if: runner.os == 'macOS'
+        run: bash script/build/build_macos_dmg.sh
+
+      - name: Verify built package policy
+        env:
+          OUTPUT_DIR: ${{ matrix.output-dir }}
+          PACKAGE_GLOB: ${{ matrix.package-glob }}
+        run: |
+          shopt -s nullglob
+          packages=("$OUTPUT_DIR"/$PACKAGE_GLOB)
+          test "${#packages[@]}" -eq 1
+
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            extracted="$(mktemp -d)"
+            trap 'rm -rf "$extracted"' EXIT
+            dpkg-deb -x "${packages[0]}" "$extracted"
+            app_root="$extracted/opt/breeze"
+            test -x "$app_root/breeze"
+          else
+            app_root=build/macos/Build/Products/Release/Breeze.app
+            test -d "$app_root/Contents/MacOS"
+          fi
+
+          if grep -aEilr 'sentry\.io|SentryFlutter|SentryWidget|sentry[-_]cocoa|flatpak-spawn' "$app_root"; then
+            echo "::error::Unexpected telemetry or Flatpak host-spawn marker found in built package"
+            exit 1
+          else
+            test "$?" -eq 1
+          fi
+
+          git diff --exit-code -- pubspec.lock rust/Cargo.lock
+
+      - name: Record package and plugin hashes
+        id: hashes
+        env:
+          OUTPUT_DIR: ${{ matrix.output-dir }}
+          PACKAGE_GLOB: ${{ matrix.package-glob }}
+        run: |
+          shopt -s nullglob
+          packages=("$OUTPUT_DIR"/$PACKAGE_GLOB)
+          test "${#packages[@]}" -eq 1
+          echo "package=${packages[0]}" >> "$GITHUB_OUTPUT"
+          (cd "$OUTPUT_DIR" && shasum -a 256 "$(basename "${packages[0]}")") \
+            | tee "$OUTPUT_DIR/SHA256SUMS"
+          (cd rust/assets && shasum -a 256 jm-comic.bundle.cjs bika-comic.bundle.cjs) \
+            | tee "$OUTPUT_DIR/BUILTIN_PLUGIN_SHA256SUMS"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: ${{ steps.hashes.outputs.package }}
+
+      - name: Upload hardened artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ steps.hashes.outputs.package }}
+            ${{ matrix.output-dir }}/SHA256SUMS
+            ${{ matrix.output-dir }}/BUILTIN_PLUGIN_SHA256SUMS
+          if-no-files-found: error

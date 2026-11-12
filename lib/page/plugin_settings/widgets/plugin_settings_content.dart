@@ -23,6 +23,8 @@ class PluginSettingsContent extends StatelessWidget {
     required this.onUpdateDebugConfig,
     required this.onConfirmDeletePlugin,
     required this.onUpdatePlugin,
+    required this.onOpenLoginPage,
+    required this.onOpenDetailPage,
     required this.onCommitField,
     required this.onRunAction,
   });
@@ -39,10 +41,11 @@ class PluginSettingsContent extends StatelessWidget {
   onUpdateDebugConfig;
   final Future<void> Function() onConfirmDeletePlugin;
   final Future<void> Function() onUpdatePlugin;
+  final Future<void> Function() onOpenLoginPage;
+  final Future<void> Function() onOpenDetailPage;
   final Future<void> Function(Map<String, dynamic> field, dynamic value)
   onCommitField;
   final Future<void> Function(Map<String, dynamic> action) onRunAction;
-
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -50,6 +53,7 @@ class PluginSettingsContent extends StatelessWidget {
       children: [
         // 插件自身设置优先，宿主管理项沉底
         ..._buildBodySections(context),
+        if (state.detailSupported) _buildDetailSection(),
         _buildManagementSection(context),
       ],
     );
@@ -74,6 +78,30 @@ class PluginSettingsContent extends StatelessWidget {
       if (debugEnabled) _buildDebugUrlRow(context),
       _buildDeletePluginRow(),
     ];
+  }
+
+  Widget _buildLoginRow() {
+    final title = state.loginTitle.trim().isEmpty
+        ? t.plugin.accountLogin
+        : state.loginTitle.trim();
+    final subtitle = state.loginSubtitle.trim().isEmpty
+        ? t.plugin.accountLoginSubtitle
+        : state.loginSubtitle.trim();
+    return PluginSettingsFieldRow(
+      title: title,
+      subtitle: subtitle,
+      trailing: const Icon(Icons.login, size: 18),
+      onTap: deleted ? null : onOpenLoginPage,
+    );
+  }
+
+  Widget _buildDetailRow() {
+    return PluginSettingsFieldRow(
+      title: t.plugin.pluginDetail,
+      subtitle: t.plugin.pluginDetailSubtitle,
+      trailing: const Icon(Icons.info_outline, size: 18),
+      onTap: deleted ? null : onOpenDetailPage,
+    );
   }
 
   Widget _buildVersionRow() {
@@ -160,6 +188,9 @@ class PluginSettingsContent extends StatelessWidget {
     final userInfoSection = _buildUserInfoSection(context);
     if (userInfoSection != null) {
       sections.add(userInfoSection);
+    } else if (state.loginSupported) {
+      // 插件声明了登录能力但没有用户信息区时，单独给一个登录入口。
+      sections.add(_buildLoginSection());
     }
     sections.addAll(_buildSettingSections(context));
     final actionsSection = _buildActionsSection(context);
@@ -212,7 +243,32 @@ class PluginSettingsContent extends StatelessWidget {
       child: PluginSettingsSectionCard(
         title: state.userInfo['title']?.toString() ?? t.plugin.userInfoTitle,
         colorScheme: colorScheme,
-        children: _buildUserInfoChildren(context),
+        children: [
+          ..._buildUserInfoChildren(context),
+          if (state.loginSupported) _buildLoginRow(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoginSection() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: PluginSettingsSectionCard(
+        title: t.plugin.userInfoTitle,
+        colorScheme: colorScheme,
+        children: [_buildLoginRow()],
+      ),
+    );
+  }
+
+  Widget _buildDetailSection() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: PluginSettingsSectionCard(
+        title: t.plugin.pluginDetail,
+        colorScheme: colorScheme,
+        children: [_buildDetailRow()],
       ),
     );
   }

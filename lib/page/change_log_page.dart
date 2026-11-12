@@ -6,10 +6,10 @@ import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zephyr/i18n/strings.g.dart';
-import 'package:zephyr/network/http/wind_http.dart';
 import 'package:zephyr/network/utils/github_proxy.dart';
 import 'package:zephyr/service/update/json/github_release_json.dart';
 import 'package:zephyr/util/error_filter.dart';
+import 'package:zephyr/main.dart';
 
 const _proxyReleasesApiUrl = '$breezeGithubApi/repos/deretame/Breeze/releases';
 const _githubReleasesApiUrl =
@@ -88,7 +88,8 @@ class _ChangelogPageState extends State<ChangelogPage> {
             newData = githubReleaseJsonFromJson(response.text);
             break;
           }
-        } catch (_) {
+        } catch (e, st) {
+          logger.e(e, stackTrace: st);
           // 当前请求失败时继续尝试下一个地址。
         }
       }
@@ -117,6 +118,7 @@ class _ChangelogPageState extends State<ChangelogPage> {
         throw Exception('所有更新日志请求地址均失败');
       }
     } catch (e) {
+      logger.e(e);
       if (mounted) {
         // 如果是首次加载出错，显示全屏错误页面
         if (_releases.isEmpty && refresh) {
@@ -218,29 +220,36 @@ class _ChangelogPageState extends State<ChangelogPage> {
       );
     }
 
+    // 桌面端窄栏居中：与追更/more等页一致，Align + 768 上限，移动端无影响。
     return RefreshIndicator(
       onRefresh: () => _fetchReleases(refresh: true),
-      child: ListView.builder(
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        itemCount: _releases.length + (_hasMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index == _releases.length) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-          final release = _releases[index];
-          return Container(
-            key: ValueKey(release.id), // 添加 Key 提高性能
-            child: _ReleaseCard(release: release, onLinkTap: _launchUrl)
-                .animate()
-                .fade(duration: 400.ms)
-                .slideY(begin: 0.1, end: 0, curve: Curves.easeOutQuad),
-          );
-        },
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 768),
+          child: ListView.builder(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            itemCount: _releases.length + (_hasMore ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index == _releases.length) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final release = _releases[index];
+              return Container(
+                key: ValueKey(release.id), // 添加 Key 提高性能
+                child: _ReleaseCard(release: release, onLinkTap: _launchUrl)
+                    .animate()
+                    .fade(duration: 400.ms)
+                    .slideY(begin: 0.1, end: 0, curve: Curves.easeOutQuad),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

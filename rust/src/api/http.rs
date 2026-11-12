@@ -299,10 +299,12 @@ pub async fn fetch_direct(url: String, init: Option<FetchInit>) -> Result<FetchR
 }
 
 fn create_reqwest_client(options: &HttpClientOptions) -> Result<ClientWithMiddleware> {
-    let mut config = current_http_client_config();
-    if let Some(disable_tls) = options.danger_accept_invalid_certs {
-        config.disable_tls_verify = disable_tls;
+    if options.danger_accept_invalid_certs == Some(true) {
+        return Err(anyhow!(
+            "Hardened build forbids disabling TLS certificate verification"
+        ));
     }
+    let mut config = current_http_client_config();
     if let Some(proxy) = options
         .http_proxy
         .as_deref()
