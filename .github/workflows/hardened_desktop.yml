@@ -44,7 +44,7 @@ jobs:
             output-dir: build-deb
             package-glob: breeze_*.deb
           - platform: macOS arm64
-            runner: macos-15
+            runner: macos-latest
             rust-target: aarch64-apple-darwin
             flutter-archive: stable/macos/flutter_macos_arm64_3.47.8-stable.zip
             flutter-sha256: 6114edc2dae3636cfefb7e4456a4510399ee856e324149b34dbacb509e329d05
@@ -86,7 +86,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           test "$(uname -m)" = arm64
-          developer_dir=/Applications/Xcode_26.3.app/Contents/Developer
+          developer_dir=/Applications/Xcode_26.6.app/Contents/Developer
           test -d "$developer_dir"
           echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
           DEVELOPER_DIR="$developer_dir" xcodebuild -version
