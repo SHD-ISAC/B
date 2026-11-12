@@ -41,7 +41,11 @@ codesign --verify --deep --strict --verbose=2 "$packaged_app"
 
 while IFS= read -r -d '' native_file; do
   if file -b "$native_file" | grep -Fq 'Mach-O'; then
-    lipo -verify_arch arm64 "$native_file"
+    archs=$(lipo -archs "$native_file")
+    if ! grep -Eq '(^|[[:space:]])arm64([[:space:]]|$)' <<< "$archs"; then
+      printf '::error::Missing arm64 slice in %s (%s)\n' "$native_file" "$archs"
+      exit 1
+    fi
   fi
 done < <(find "$packaged_app" -type f -print0)
 echo "Verified arm64 slices in the packaged Mach-O files"
