@@ -59,7 +59,9 @@ jobs:
           persist-credentials: false
 
       - name: Verify hardened source policy
-        run: bash script/lint/verify_hardened_source.sh
+        run: |
+          bash script/lint/verify_hardened_source.sh
+          grep -qxF "channel = \"$RUSTUP_TOOLCHAIN\"" rust/rust-toolchain.toml
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'

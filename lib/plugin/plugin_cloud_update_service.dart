@@ -5,7 +5,6 @@ import 'package:zephyr/plugin/plugin_registry_service.dart';
 import 'package:zephyr/plugin/utils/plugin_cloud_download_utils.dart';
 import 'package:zephyr/plugin/utils/plugin_update_channel_utils.dart';
 import 'package:zephyr/plugin/utils/plugin_version_utils.dart';
-import 'package:zephyr/util/json/json_value.dart';
 
 class PluginCloudUpdateService {
   PluginCloudUpdateService._();

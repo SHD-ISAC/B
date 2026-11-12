@@ -21,6 +21,7 @@ void main(List<String> args) async {
           ? BuildMode.release
           : BuildMode.debug,
       assetName: 'src/rust/frb_generated.dart',
+      extraCargoBuildArgs: const ['--locked'],
       extraCargoEnvironmentVariables: extraCargoEnvironmentVariables,
     ).run(input: input, output: output);
   });

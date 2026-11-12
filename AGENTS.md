@@ -143,7 +143,7 @@ page/comic_info/
 ### 4.1 必需工具链
 
 - **Flutter SDK**：`3.47.6`（通过 `.fvmrc` 与 `.puro.json` 锁定，建议使用 FVM / Puro）
-- **Rust Toolchain**：通过 `rustup` 安装，并添加目标平台 target（无 `rust-toolchain.toml`，跟随 stable）
+- **Rust Toolchain**：通过 `rustup` 安装 `rust/rust-toolchain.toml` 固定的版本及目标平台。
 - **LLVM / Clang**：`rustqjs` 等库需要解析 C 头，Windows 推荐 `choco install llvm`
 - **Java 21**：Android / Windows / Linux 编译必需
 - **Android SDK / NDK**：NDK 版本见 `android/app/build.gradle.kts` 中的 `ndkVersion`
