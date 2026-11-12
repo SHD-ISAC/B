@@ -39,7 +39,14 @@ mounted=true
 packaged_app="$work/mount/Breeze.app"
 codesign --verify --deep --strict --verbose=2 "$packaged_app"
 
-if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+while IFS= read -r -d '' native_file; do
+  if file -b "$native_file" | grep -Fq 'Mach-O'; then
+    lipo -verify_arch arm64 "$native_file"
+  fi
+done < <(find "$packaged_app" -type f -print0)
+echo "Verified arm64 slices in the packaged Mach-O files"
+
+if [[ "${GITHUB_ACTIONS:-}" == true && "$(uname -m)" == arm64 ]]; then
   "$packaged_app/Contents/MacOS/$binary" >"$work/startup.log" 2>&1 &
   pid=$!
   database="$HOME/Library/Application Support/com.zephyr.breeze/db/breeze_db/data.mdb"
