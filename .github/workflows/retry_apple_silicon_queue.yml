@@ -1,0 +1,125 @@
+name: Retry Apple silicon queue
+
+on:
+  workflow_run:
+    workflows: ["Hardened Desktop Build"]
+    types: [completed]
+    branches: ['hardened-*', main]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Build run ID to check
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: retry-apple-silicon-${{ github.event.workflow_run.id || inputs.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      actions: write
+      checks: read
+      contents: read
+    steps:
+      - name: Retry an Apple silicon job that did not receive a runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
+          EVENT_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          BUILD_WORKFLOW: hardened_desktop.yml
+          DEFAULT_BRANCH: main
+          MAC_JOB_NAME: macOS arm64
+        shell: node {0}
+        run: |
+          const env = process.env;
+          const repo = "/repos/" + env.GITHUB_REPOSITORY;
+          const runnerLabels = ["macos-15", "macos-26", "macos-latest", "xcode-27"];
+
+          async function api(path, { method = "GET", allowMissing = false } = {}) {
+            const response = await fetch(env.GITHUB_API_URL + repo + path, {
+              method,
+              headers: {
+                Accept: "application/vnd.github+json",
+                Authorization: "Bearer " + env.GH_TOKEN,
+                "X-GitHub-Api-Version": "2022-11-28"
+              },
+              signal: AbortSignal.timeout(15_000)
+            });
+            if (allowMissing && response.status === 404) return null;
+            if (!response.ok) {
+              throw new Error(method + " " + path + ": " + response.status + " " + await response.text());
+            }
+            if (method === "GET") return response.json();
+          }
+
+          async function retry() {
+            if (!/^\d+$/.test(env.RUN_ID)) throw new Error("Invalid build run ID");
+            const runPath = "/actions/runs/" + env.RUN_ID;
+            const run = await api(runPath);
+
+            if (run.status !== "completed" || run.conclusion !== "failure"
+                || run.head_repository?.full_name !== env.GITHUB_REPOSITORY
+                || run.path !== ".github/workflows/" + env.BUILD_WORKFLOW
+                || !["push", "workflow_dispatch"].includes(run.event)
+                || !(run.head_branch?.startsWith("hardened-") || run.head_branch === env.DEFAULT_BRANCH)
+                || !Number.isInteger(run.run_attempt) || run.run_attempt > 50
+                || Date.now() - Date.parse(run.created_at) >= 30 * 86_400_000
+                || (env.EVENT_ATTEMPT && run.run_attempt !== Number(env.EVENT_ATTEMPT))) {
+              console.log("The build run is no longer eligible for a retry.");
+              return;
+            }
+
+            const { jobs } = await api(runPath + "/attempts/" + run.run_attempt + "/jobs?per_page=100");
+            const job = jobs.find(item =>
+              item.name === env.MAC_JOB_NAME
+              && item.conclusion === "cancelled"
+              && (item.runner_id === 0 || item.runner_id === null)
+              && !item.runner_name
+              && item.steps?.length === 0
+              && item.labels.some(label => runnerLabels.includes(label))
+            );
+            if (!job) {
+              console.log("No Apple silicon job was cancelled before receiving a runner.");
+              return;
+            }
+
+            // GitHub records the observed allocation timeout as about 15 minutes, with no job logs.
+            const queuedFor = (Date.parse(job.completed_at) - Date.parse(job.created_at)) / 1000;
+            const observedQueueTimeout = job.runner_id === 0 && queuedFor >= 900 && queuedFor <= 930
+              && jobs.every(item => item.id === job.id || ["success", "skipped"].includes(item.conclusion));
+            if (!observedQueueTimeout) {
+              const annotations = await api("/check-runs/" + job.id + "/annotations?per_page=100");
+              const missedRunner = annotations.some(({ message }) =>
+                /the job was not acquired by runner of type hosted|due to capacity constraints, jobs targeting macos arm64 runners/i.test(message)
+              );
+              if (!missedRunner) {
+                console.log("No GitHub runner allocation error was recorded.");
+                return;
+              }
+            }
+
+            const branch = encodeURIComponent(run.head_branch);
+            const [head, recent] = await Promise.all([
+              api("/branches/" + branch, { allowMissing: true }),
+              api("/actions/workflows/" + run.workflow_id + "/runs?branch=" + branch + "&per_page=1")
+            ]);
+            if (head?.commit.sha !== run.head_sha || recent.workflow_runs[0]?.id !== run.id) {
+              console.log("A newer commit or build has superseded this run.");
+              return;
+            }
+
+            await api("/actions/jobs/" + job.id + "/rerun", { method: "POST" });
+            console.log("Queued " + job.name + " for build run " + run.id + ", attempt " + (run.run_attempt + 1) + ".");
+          }
+
+          retry().catch(error => {
+            console.error(error.message);
+            process.exitCode = 1;
+          });
