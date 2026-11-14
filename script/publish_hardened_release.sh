@@ -33,14 +33,22 @@ for directory in "${macos[0]}" "${linux[0]}" additional-android additional-ios a
     for package in "${packages[@]}"; do
       [[ -s "$package" && ! -e "$output/$package" ]]
       digest="$(sha256sum -- "$package")"
-      grep -Fxq "$digest" SHA256SUMS
+      digest="${digest%% *}"
+      # Windows checksum tools may write a binary-mode marker after the digest.
+      if ! grep -Fxq -e "$digest  $package" -e "$digest *$package" SHA256SUMS; then
+        printf '::error::Checksum list is missing the verified digest for %s\n' "$package"
+        exit 1
+      fi
       cp -- "$package" "$output/"
     done
     if [[ "$PROJECT_NAME" == Breeze ]]; then
+      normalized="$output/current-plugin-sha256sums"
+      sed -E 's/^([[:xdigit:]]{64}) \*/\1  /' BUILTIN_PLUGIN_SHA256SUMS > "$normalized"
       if [[ -f "$output/BUILTIN_PLUGIN_SHA256SUMS" ]]; then
-        cmp BUILTIN_PLUGIN_SHA256SUMS "$output/BUILTIN_PLUGIN_SHA256SUMS"
+        cmp "$normalized" "$output/BUILTIN_PLUGIN_SHA256SUMS"
+        rm -- "$normalized"
       else
-        cp BUILTIN_PLUGIN_SHA256SUMS "$output/"
+        mv -- "$normalized" "$output/BUILTIN_PLUGIN_SHA256SUMS"
       fi
     fi
   )
@@ -99,7 +107,10 @@ fi
 published_assets="$(gh api "repos/$repo/releases/$release_id" --jq '
   .assets[] | select(.state == "uploaded" and (.digest | startswith("sha256:"))) |
   (.digest | ltrimstr("sha256:")) + "  " + .name' | sort)"
-[[ "$published_assets" == "$expected_assets" ]]
+if [[ "$published_assets" != "$expected_assets" ]]; then
+  echo "::error::Release assets returned by GitHub do not match the build output checksums"
+  exit 1
+fi
 
 if [[ "$(jq -r '.isDraft' <<< "$release")" == true ]]; then
   assert_current_head
