@@ -205,7 +205,7 @@ jobs:
           test -f "$app/Info.plist"
           plutil -lint "$app/Info.plist"
           executable="$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$app/Info.plist")"
-          xcrun lipo -verify_arch arm64 "$app/$executable"
+          test "$(xcrun lipo -archs "$app/$executable")" = arm64
           work="$RUNNER_TEMP/ipa"
           mkdir -p "$work/Payload"
           ditto "$app" "$work/Payload/Runner.app"
