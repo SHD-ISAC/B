@@ -98,7 +98,7 @@ fi
 
 published_assets="$(gh api "repos/$repo/releases/$release_id" --jq '
   .assets[] | select(.state == "uploaded" and (.digest | startswith("sha256:"))) |
-  "\(.digest | sub(\"^sha256:\"; \"\"))  \(.name)"' | sort)"
+  (.digest | ltrimstr("sha256:")) + "  " + .name' | sort)"
 [[ "$published_assets" == "$expected_assets" ]]
 
 if [[ "$(jq -r '.isDraft' <<< "$release")" == true ]]; then

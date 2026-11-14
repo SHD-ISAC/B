@@ -94,6 +94,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Install Android command-line tools
+        if: matrix.platform == 'android'
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+        with:
+          log-accepted-android-sdk-licenses: 'false'
+          packages: ''
       - name: Set up Android SDK
         if: matrix.platform == 'android'
         run: |
@@ -125,7 +131,7 @@ jobs:
 
       - name: Read package version
         run: |
-          version="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
+          version="$(awk '/^version:/ {sub(/\r$/, ""); print $2; exit}' pubspec.yaml)"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]
           printf 'PACKAGE_VERSION=%s\n' "$version" >> "$GITHUB_ENV"
           mkdir -p dist-packages
