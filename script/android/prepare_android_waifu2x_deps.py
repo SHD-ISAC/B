@@ -15,6 +15,7 @@ These paths are referenced by:
 """
 
 import os
+import hashlib
 import shutil
 import subprocess
 import sys
@@ -24,9 +25,11 @@ from urllib.request import urlopen
 from urllib.error import URLError
 
 OPENCV_VERSION = "4.11.0"
+OPENCV_SHA256 = "fab645f6b42e4f02ed43e57191cab37b00b861d13191afa34d68fc9f3d8ff763"
 OPENCV_URL = f"https://github.com/opencv/opencv/releases/download/{OPENCV_VERSION}/opencv-{OPENCV_VERSION}-android-sdk.zip"
 
 LIBWEBP_REPO = "https://github.com/webmproject/libwebp.git"
+LIBWEBP_COMMIT = "4fa21912338357f89e4fd51cf2368325b59e9bd9"
 
 
 def project_root() -> Path:
@@ -83,6 +86,11 @@ def setup_opencv() -> None:
     if not zip_path.exists():
         download(OPENCV_URL, zip_path)
 
+    with zip_path.open("rb") as archive:
+        actual = hashlib.file_digest(archive, "sha256").hexdigest()
+    if actual != OPENCV_SHA256:
+        zip_path.unlink()
+        raise RuntimeError(f"OpenCV archive SHA-256 mismatch: {actual}")
     extract_zip(zip_path, deps_dir())
 
     extracted = deps_dir() / f"opencv-{OPENCV_VERSION}-android-sdk"
@@ -104,9 +112,13 @@ def setup_libwebp() -> None:
     deps_dir().mkdir(parents=True, exist_ok=True)
     print(f"Cloning libwebp from {LIBWEBP_REPO} ...")
     subprocess.run(
-        ["git", "clone", "--depth", "1", LIBWEBP_REPO, str(target)],
+        ["git", "clone", "--branch", "v1.6.0", "--depth", "1", LIBWEBP_REPO, str(target)],
         check=True,
     )
+    revision = subprocess.check_output(["git", "-C", str(target), "rev-parse", "HEAD"], text=True).strip()
+    if revision != LIBWEBP_COMMIT:
+        shutil.rmtree(target)
+        raise RuntimeError(f"Unexpected libwebp revision: {revision}")
     print(f"libwebp ready at: {target}")
 
 

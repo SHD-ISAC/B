@@ -45,7 +45,8 @@ fun findRustlsPlatformVerifierProject(): String {
 
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
-if (keystorePropertiesFile.exists()) {
+val hardenedUnsigned = providers.environmentVariable("HARDENED_ANDROID_UNSIGNED").orNull == "true"
+if (!hardenedUnsigned && keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
 
@@ -89,7 +90,7 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs["release"]
+            if (!hardenedUnsigned) signingConfig = signingConfigs["release"]
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
