@@ -146,7 +146,8 @@ jobs:
         if: matrix.platform == 'android'
         env:
           HARDENED_ANDROID_UNSIGNED: 'true'
-        run: flutter build apk --release --no-pub --target-platform=android-arm64
+        # Let Flutter regenerate the release registrant without integration_test.
+        run: flutter build apk --release --target-platform=android-arm64
       - name: Package Android APKs
         if: matrix.platform == 'android'
         env:
@@ -199,7 +200,7 @@ jobs:
         if: matrix.platform == 'ios'
         run: |
           set -euo pipefail
-          flutter build ios --release --no-codesign --no-pub
+          flutter build ios --release --no-codesign
           app="build/ios/Release-iphoneos/Runner.app"
           test -f "$app/Info.plist"
           plutil -lint "$app/Info.plist"
@@ -219,7 +220,7 @@ jobs:
           $clang = 'C:/Program Files/LLVM/bin'
           if (-not (Test-Path "$clang/libclang.dll")) { throw "LLVM libclang.dll is missing" }
           $env:LIBCLANG_PATH = $clang
-          flutter build windows --release --no-pub
+          flutter build windows --release
           if ($LASTEXITCODE -ne 0) { throw 'Flutter Windows build failed' }
           $bundle = 'build/windows/x64/runner/Release'
           if (!(Test-Path "$bundle/zephyr.exe") -or !(Test-Path "$bundle/flutter_windows.dll") -or !(Test-Path "$bundle/data/app.so")) {
