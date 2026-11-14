@@ -25,6 +25,7 @@ fun findRustlsPlatformVerifierProject(): String {
         commandLine(
             "cargo",
             "metadata",
+            "--locked",
             "--format-version",
             "1",
             "--filter-platform",
