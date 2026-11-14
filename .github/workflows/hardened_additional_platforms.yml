@@ -1,0 +1,255 @@
+name: Hardened Android, iOS and Windows Build
+
+on:
+  workflow_call:
+    secrets:
+      ANDROID_RELEASE_KEYSTORE_BASE64:
+        required: false
+      ANDROID_RELEASE_KEYSTORE_PASSWORD:
+        required: false
+      ANDROID_RELEASE_KEY_ALIAS:
+        required: false
+      ANDROID_RELEASE_KEY_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    timeout-minutes: 100
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: android
+            name: Android
+            runner: ubuntu-24.04
+            rust-target: aarch64-linux-android
+            archive: stable/linux/flutter_linux_3.47.8-stable.tar.xz
+            digest: baf7dcc5a3dbba60fe863bf493a6cf203195621f7786eaa5a1bba02cd0d87dd2
+          - platform: ios
+            name: iOS arm64
+            runner: macos-26-intel
+            rust-target: aarch64-apple-ios
+            archive: stable/macos/flutter_macos_3.47.8-stable.zip
+            digest: b8a3c255a51a8c0c0943a4d5bdf9b26008c34f02febf69640c8aab413afd896f
+          - platform: windows
+            name: Windows x64
+            runner: windows-2025-vs2026
+            rust-target: x86_64-pc-windows-msvc
+            archive: stable/windows/flutter_windows_3.47.8-stable.zip
+            digest: 11e19ea3409808fe3b3765ea8149640c299e58cce6eda7c9f38fc1b4a193eb6e
+    env:
+      FLUTTER_SUPPRESS_ANALYTICS: 'true'
+      COCOAPODS_DISABLE_STATS: 'true'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Verify hardened source policy
+        run: bash script/lint/verify_hardened_source.sh
+      - name: Install verified Flutter SDK
+        env:
+          SDK_ARCHIVE: ${{ matrix.archive }}
+          SDK_SHA256: ${{ matrix.digest }}
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/flutter-sdk"
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            sdk="$(cygpath -u "$RUNNER_TEMP")/flutter-sdk"
+          fi
+          mkdir -p "$sdk"
+          archive="$sdk/${SDK_ARCHIVE##*/}"
+          curl --proto '=https' --proto-redir '=https' --fail --silent --show-error --location \
+            --retry 3 --output "$archive" "https://storage.googleapis.com/flutter_infra_release/releases/$SDK_ARCHIVE"
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            printf '%s  %s\n' "$SDK_SHA256" "$archive" | shasum -a 256 -c -
+            ditto -x -k "$archive" "$sdk"
+          else
+            printf '%s  %s\n' "$SDK_SHA256" "$archive" | sha256sum -c -
+            if [[ "$RUNNER_OS" == Windows ]]; then
+              7z x -y "-o$(cygpath -w "$sdk")" "$(cygpath -w "$archive")" >/dev/null
+            else
+              tar -xJf "$archive" -C "$sdk"
+            fi
+          fi
+          rm "$archive"
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            cygpath -w "$sdk/flutter/bin" >> "$GITHUB_PATH"
+          else
+            echo "$sdk/flutter/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Set up Android JDK
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install Android command-line tools
+        if: matrix.platform == 'android'
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+        with:
+          log-accepted-android-sdk-licenses: 'false'
+          packages: ''
+      - name: Set up Android SDK
+        if: matrix.platform == 'android'
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          sdkmanager "ndk;29.0.14206865" "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$ANDROID_HOME/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/lib" >> "$GITHUB_ENV"
+      - name: Select Xcode
+        if: matrix.platform == 'ios'
+        run: |
+          developer_dir=/Applications/Xcode_26.6.app/Contents/Developer
+          test -d "$developer_dir"
+          echo "DEVELOPER_DIR=$developer_dir" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$developer_dir" xcrun --sdk iphoneos --show-sdk-path
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: '1.98.1'
+          targets: ${{ matrix.rust-target }}
+
+      - name: Resolve locked Flutter dependencies
+        if: matrix.platform != 'windows'
+        run: flutter pub get --enforce-lockfile
+      - name: Resolve locked Windows dependencies
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: flutter pub get --enforce-lockfile
+
+      - name: Read package version
+        run: |
+          version="$(awk '/^version:/ {sub(/\r$/, ""); print $2; exit}' pubspec.yaml)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]
+          printf 'PACKAGE_VERSION=%s\n' "$version" >> "$GITHUB_ENV"
+          mkdir -p dist-packages
+
+      - name: Build Breeze's native Android upscaler
+        if: matrix.platform == 'android'
+        run: |
+          python3 script/android/prepare_android_waifu2x_deps.py
+          python3 script/android/build_ncnn_static_android.py
+          python3 script/android/build_waifu2x_cli_android.py
+      - name: Build Android APK
+        if: matrix.platform == 'android'
+        env:
+          HARDENED_ANDROID_UNSIGNED: 'true'
+        # Let Flutter regenerate the release registrant without integration_test.
+        run: flutter build apk --release --target-platform=android-arm64
+      - name: Package Android APKs
+        if: matrix.platform == 'android'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apks=(build/app/outputs/flutter-apk/*.apk)
+          test "${#apks[@]}" -eq 1
+          unzip -Z1 "${apks[0]}" > "$RUNNER_TEMP/apk-files"
+          grep -Fxq 'lib/arm64-v8a/libwindcore.so' "$RUNNER_TEMP/apk-files"
+          grep -Fxq 'lib/arm64-v8a/libwaifu2x_cli.so' "$RUNNER_TEMP/apk-files"
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          if [[ -n "$KEYSTORE_BASE64$KEYSTORE_PASSWORD$KEY_ALIAS$KEY_PASSWORD" ]]; then
+            : "${KEYSTORE_BASE64:?}" "${KEYSTORE_PASSWORD:?}" "${KEY_ALIAS:?}" "${KEY_PASSWORD:?}"
+            keystore="$(mktemp)"
+            trap 'rm -f "$keystore"' EXIT
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          fi
+          for apk in "${apks[@]}"; do
+            abi="${apk##*/}"
+            abi="${abi#app-}"
+            abi="${abi%-release.apk}"
+            case "$abi" in
+              arm64-v8a|armeabi-v7a|x86_64) ;;
+              release.apk|release-unsigned.apk) abi=arm64-v8a ;;
+              *) echo "::error::Unexpected APK name: $apk"; exit 1 ;;
+            esac
+            output="dist-packages/Breeze-$PACKAGE_VERSION-Android-$abi"
+            if [[ -n "${keystore:-}" ]]; then
+              "$tools/zipalign" -P 16 -f 4 "$apk" "$RUNNER_TEMP/aligned.apk"
+              "$tools/apksigner" sign --ks "$keystore" --ks-key-alias "$KEY_ALIAS" \
+                --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEY_PASSWORD \
+                --out "$output.apk" "$RUNNER_TEMP/aligned.apk"
+              "$tools/apksigner" verify --verbose "$output.apk"
+            else
+              if "$tools/apksigner" verify "$apk" >/dev/null 2>&1; then
+                echo "::error::The APK has an unexpected signature"
+                exit 1
+              fi
+              "$tools/zipalign" -P 16 -f 4 "$apk" "$output-unsigned.apk"
+              echo "::notice::APK requires signing before installation."
+            fi
+          done
+
+      - name: Build and package unsigned iOS IPA
+        if: matrix.platform == 'ios'
+        run: |
+          set -euo pipefail
+          flutter build ios --release --no-codesign
+          app="build/ios/Release-iphoneos/Runner.app"
+          test -f "$app/Info.plist"
+          plutil -lint "$app/Info.plist"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$app/Info.plist")"
+          test "$(xcrun lipo -archs "$app/$executable")" = arm64
+          work="$RUNNER_TEMP/ipa"
+          mkdir -p "$work/Payload"
+          ditto "$app" "$work/Payload/Runner.app"
+          ditto -c -k --keepParent "$work/Payload" "dist-packages/Breeze-$PACKAGE_VERSION-iOS-arm64-unsigned.ipa"
+          unzip -tq dist-packages/*.ipa
+
+      - name: Build and package portable Windows ZIP
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $clang = 'C:/Program Files/LLVM/bin'
+          if (-not (Test-Path "$clang/libclang.dll")) { throw "LLVM libclang.dll is missing" }
+          $env:LIBCLANG_PATH = $clang
+          flutter build windows --release
+          if ($LASTEXITCODE -ne 0) { throw 'Flutter Windows build failed' }
+          $bundle = 'build/windows/x64/runner/Release'
+          if (!(Test-Path "$bundle/zephyr.exe") -or !(Test-Path "$bundle/flutter_windows.dll") -or !(Test-Path "$bundle/data/app.so")) {
+            throw 'Flutter Windows bundle is incomplete'
+          }
+          $output = Join-Path (Resolve-Path 'dist-packages') "Breeze-$env:PACKAGE_VERSION-Windows-x64-portable.zip"
+          Compress-Archive -LiteralPath $bundle -DestinationPath $output
+
+      - name: Confirm dependency locks and record package hashes
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- pubspec.lock rust/Cargo.lock
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            (cd dist-packages && shasum -a 256 -- *) > platform-sha256sums
+          else
+            (cd dist-packages && sha256sum -- *) > platform-sha256sums
+          fi
+          mv platform-sha256sums dist-packages/SHA256SUMS
+          (cd rust/assets && sha256sum jm-comic.bundle.cjs bika-comic.bundle.cjs) > "dist-packages/BUILTIN_PLUGIN_SHA256SUMS"
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
+        with:
+          subject-path: |
+            dist-packages/*.apk
+            dist-packages/*.ipa
+            dist-packages/*.zip
+      - name: Upload platform packages
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: additional-${{ matrix.platform }}
+          path: dist-packages/*
+          if-no-files-found: error
