@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: ["Hardened Desktop Build"]
     types: [completed]
-    branches: ['hardened-*', main]
+    branches: ['hardened-*', 'ci-validate-*', main]
   workflow_dispatch:
     inputs:
       run_id:
@@ -68,7 +68,7 @@ jobs:
                 || run.head_repository?.full_name !== env.GITHUB_REPOSITORY
                 || run.path !== ".github/workflows/" + env.BUILD_WORKFLOW
                 || !["push", "workflow_dispatch"].includes(run.event)
-                || !(run.head_branch?.startsWith("hardened-") || run.head_branch === env.DEFAULT_BRANCH)
+                || !(run.head_branch?.startsWith("hardened-") || run.head_branch?.startsWith("ci-validate-") || run.head_branch === env.DEFAULT_BRANCH)
                 || !Number.isInteger(run.run_attempt) || run.run_attempt > 50
                 || Date.now() - Date.parse(run.created_at) >= 30 * 86_400_000
                 || (env.EVENT_ATTEMPT && run.run_attempt !== Number(env.EVENT_ATTEMPT))) {

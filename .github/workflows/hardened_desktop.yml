@@ -4,7 +4,13 @@ on:
   push:
     branches:
       - 'hardened-*'
+      - 'ci-validate-*'
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a GitHub Release after all builds pass
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -25,6 +31,7 @@ env:
 
 jobs:
   build:
+    if: startsWith(github.ref, 'refs/heads/hardened-') || startsWith(github.ref, 'refs/heads/ci-validate-')
     name: ${{ matrix.platform }}
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -193,3 +200,41 @@ jobs:
             ${{ matrix.output-dir }}/SHA256SUMS
             ${{ matrix.output-dir }}/BUILTIN_PLUGIN_SHA256SUMS
           if-no-files-found: error
+
+  additional:
+    if: startsWith(github.ref, 'refs/heads/hardened-') || startsWith(github.ref, 'refs/heads/ci-validate-')
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/hardened_additional_platforms.yml
+    secrets:
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+
+  release:
+    name: Publish verified GitHub Release
+    if: >-
+      github.repository == 'SHD-ISAC/B' &&
+      startsWith(github.ref, 'refs/heads/hardened-') &&
+      (github.event_name == 'push' || inputs.publish)
+    needs: [build, additional]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          path: ${{ runner.temp }}/build-artifacts
+      - name: Verify and publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROJECT_NAME: Breeze
+        shell: bash
+        run: bash script/publish_hardened_release.sh "$RUNNER_TEMP/build-artifacts"
