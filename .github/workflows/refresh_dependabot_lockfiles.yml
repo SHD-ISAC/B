@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: breeze-lockfile-refresh-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   cargo:
     runs-on: ubuntu-24.04
@@ -41,6 +45,8 @@ jobs:
           git diff --check
           git diff --stat
           git diff --name-only
+          cargo tree --manifest-path rust/Cargo.toml --locked -p bytes --depth 0
+          cargo tree --manifest-path rust/Cargo.toml --locked -p rustls --depth 0
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: updated-rust-lockfiles
