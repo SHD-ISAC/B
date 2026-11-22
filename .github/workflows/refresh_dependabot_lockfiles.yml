@@ -37,7 +37,10 @@ jobs:
           cargo update -p bytes --precise 1.12.2
           cargo metadata --locked --format-version 1 >/dev/null
       - name: Inspect lockfile changes
-        run: git diff --check && git diff --stat
+        run: |
+          git diff --check
+          git diff --stat
+          git diff --name-only
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: updated-rust-lockfiles
@@ -74,7 +77,10 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
       - name: Inspect lockfile changes
-        run: git diff --check && git diff --stat
+        run: |
+          git diff --check
+          git diff --stat
+          git diff --name-only
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: updated-pnpm-lockfiles
