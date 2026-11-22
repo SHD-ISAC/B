@@ -60,7 +60,9 @@ Map<String, String> _iosEnvironmentVariables(CodeConfig codeConfig) {
 
   final linker = _runXcrun(['--sdk', sdk, '--find', 'clang']);
   final sdkRoot = _runXcrun(['--sdk', sdk, '--show-sdk-path']);
-  final targetTripleEnv = targetTriple.replaceAll('-', '_').toUpperCase();
+  final hostSdkRoot = _runXcrun(['--sdk', 'macosx', '--show-sdk-path']);
+  final targetTripleEnv = targetTriple.replaceAll('-', '_');
+  final cargoTargetEnv = targetTripleEnv.toUpperCase();
   final deploymentTarget = codeConfig.iOS.targetVersion.toString();
   final minimumVersionFlag = switch (sdk) {
     'iphoneos' => '-miphoneos-version-min=$deploymentTarget',
@@ -71,10 +73,12 @@ Map<String, String> _iosEnvironmentVariables(CodeConfig codeConfig) {
   final rustFlags = '-C link-arg=$minimumVersionFlag';
 
   final env = <String, String>{
-    'SDKROOT': sdkRoot,
+    // Cargo also compiles build dependencies for the macOS host. Use the
+    // iOS SDK only in the flags for the iOS target below.
+    'SDKROOT': hostSdkRoot,
     'IPHONEOS_DEPLOYMENT_TARGET': deploymentTarget,
-    'CARGO_TARGET_${targetTripleEnv}_LINKER': linker,
-    'CARGO_TARGET_${targetTripleEnv}_RUSTFLAGS': rustFlags,
+    'CARGO_TARGET_${cargoTargetEnv}_LINKER': linker,
+    'CARGO_TARGET_${cargoTargetEnv}_RUSTFLAGS': rustFlags,
     'RUSTFLAGS': rustFlags,
     'CFLAGS_$targetTripleEnv': cFlags,
     'CXXFLAGS_$targetTripleEnv': cFlags,
